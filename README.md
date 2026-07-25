@@ -1,5 +1,15 @@
 # X (Twitter) Clone
 
+[![C#](https://img.shields.io/badge/C%23-%23239120?style=flat&logo=c%23&logoColor=white)](https://docs.microsoft.com/dotnet/csharp)
+[![TypeScript](https://img.shields.io/badge/TypeScript-%23007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Angular](https://img.shields.io/badge/Angular-%23DD0031?style=flat&logo=angular&logoColor=white)](https://angular.io/)
+[![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-10.0-512BD4?style=flat&logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/apps/aspnet)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-%23336791?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%23339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![CSS](https://img.shields.io/badge/CSS-%231572B6?style=flat&logo=css3&logoColor=white)](https://developer.mozilla.org/docs/Web/CSS)
+[![HTML5](https://img.shields.io/badge/HTML5-%23E34F26?style=flat&logo=html5&logoColor=white)](https://developer.mozilla.org/docs/Web/HTML)
+[![JWT](https://img.shields.io/badge/JWT-JSON%20Web%20Tokens-yellow?style=flat)](https://jwt.io/)
+
 A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Core Web API backend, a PostgreSQL database, and a beautiful Angular single-page application (SPA) frontend.
 
 ---
@@ -93,7 +103,7 @@ XClone/
    ```bash
    dotnet run
    ```
-   *The API will start and listen on `http://localhost:5000` (or `https://localhost:7040` depending on launch profile).*
+   *The API will start and listen on `http://localhost:5000` (or `https://localhost:7040` depending on launch profile).* 
 
 ---
 
