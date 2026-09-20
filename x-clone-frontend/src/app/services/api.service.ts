@@ -67,6 +67,7 @@ export class ApiService {
       createdAt: '',
       followersCount: 0,
       followingCount: 0,
+      postsCount: 0,
       isFollowed: false,
     };
     localStorage.setItem('token', res.token);

@@ -36,8 +36,7 @@ import { WidgetsComponent } from './widgets';
             </button>
             <div class="header-titles">
               <h2>{{ profile()?.displayName }}</h2>
-              <!-- Only the pages loaded so far are counted, so it reads "40+" while there is more -->
-              <span class="tweet-count">{{ postList.items().length }}{{ postList.hasMore() ? '+' : '' }} post(s)</span>
+              <span class="tweet-count">{{ postsLabel() }}</span>
             </div>
           </header>
 
@@ -439,6 +438,10 @@ export class ProfileComponent implements OnInit {
   readonly replyList = new PagedList<Post>((skip, take) => this.api.getUserReplies(this.profile()!.id, skip, take), (p) => String(p.id));
   readonly entryKey = postEntryKey;
   isOwnProfile = computed(() => this.profile()?.id === this.currentUser()?.id);
+  postsLabel = computed(() => {
+    const count = this.profile()?.postsCount ?? 0;
+    return `${count} ${count === 1 ? 'post' : 'posts'}`;
+  });
 
   loadingProfile = signal(true);
 
@@ -494,13 +497,26 @@ export class ProfileComponent implements OnInit {
     // Removes the post and any repost entries of it (deleting a post also deletes its replies)
     this.postList.remove(p => p.id === id);
     this.replyList.remove(p => p.id === id);
+    this.refreshPostsCount();
   }
 
   onPostChanged(post: Post): void {
     // Undoing your own repost takes its entry out of the list
     if (post.retweetedBy?.id === this.currentUser()?.id && !post.isRetweeted) {
       this.postList.remove(p => postEntryKey(p) === postEntryKey(post));
+      // Exactly one entry of yours went away. (Asking the server would race with the undo that is still on its way.)
+      this.profile.update(p => (p ? { ...p, postsCount: Math.max(0, p.postsCount - 1) } : p));
     }
+  }
+
+  /** Deleting a post can take more than one entry of yours with it (a repost of your own post), so ask the server for the new total. */
+  private refreshPostsCount(): void {
+    const prof = this.profile();
+    if (!prof || !this.isOwnProfile()) return;
+
+    this.api.getUserProfileByUsername(prof.username).subscribe({
+      next: (fresh) => this.profile.update(p => (p && p.id === fresh.id ? { ...p, postsCount: fresh.postsCount } : p)),
+    });
   }
 
   toggleFollow(): void {

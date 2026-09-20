@@ -8,6 +8,8 @@ export interface User {
   createdAt: string;
   followersCount: number;
   followingCount: number;
+  // The top-level posts and reposts on the profile's Posts tab (replies are not counted)
+  postsCount: number;
   isFollowed: boolean;
 }
 

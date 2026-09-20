@@ -190,6 +190,8 @@ namespace XCloneAPI.Services
             var followersCount = await _context.Follows.CountAsync(f => f.FollowingId == user.Id);
             var followingCount = await _context.Follows.CountAsync(f => f.FollowerId == user.Id);
             var isFollowed = await _context.Follows.AnyAsync(f => f.FollowerId == currentUserId && f.FollowingId == user.Id);
+            var postsCount = await _context.Posts.CountAsync(p => p.UserId == user.Id && p.ParentPostId == null)
+                + await _context.Retweets.CountAsync(r => r.UserId == user.Id);
 
             return new UserResponse
             {
@@ -202,6 +204,7 @@ namespace XCloneAPI.Services
                 CreatedAt = user.CreatedAt,
                 FollowersCount = followersCount,
                 FollowingCount = followingCount,
+                PostsCount = postsCount,
                 IsFollowed = isFollowed
             };
         }

@@ -5,8 +5,8 @@ import { Post, User } from '../models/types';
 import { ProfileComponent } from './profile';
 
 describe('ProfileComponent', () => {
-  const me = makeUser({ id: 1, username: 'me', displayName: 'Me' });
-  const alice = makeUser({ id: 5, username: 'alice', displayName: 'Alice', email: '' });
+  const me = makeUser({ id: 1, username: 'me', displayName: 'Me', postsCount: 20 });
+  const alice = makeUser({ id: 5, username: 'alice', displayName: 'Alice', email: '', postsCount: 26 });
   let harness: RouterTestingHarness;
 
   const el = () => harness.routeNativeElement as HTMLElement;
@@ -55,15 +55,15 @@ describe('ProfileComponent', () => {
   });
 
   describe('Posts tab', () => {
-    it('shows the first 20 posts, and the count reads "20+" while there are more', async () => {
+    it("shows the profile's real post count from the start, not just what has been loaded", async () => {
       await openWithPosts(posts(7, 26));
 
       expect(cards()).toHaveLength(20);
-      expect(header()).toBe('20+ post(s)');
+      expect(header()).toBe('26 posts');
       expect(loadMoreButton()).not.toBeNull();
     });
 
-    it('loads the rest, and then shows the exact count', async () => {
+    it('keeps the same count while the rest loads', async () => {
       await openWithPosts(posts(7, 26));
 
       loadMoreButton()!.click();
@@ -71,19 +71,30 @@ describe('ProfileComponent', () => {
       await settle();
 
       expect(cards()).toHaveLength(26);
-      expect(header()).toBe('26 post(s)');
+      expect(header()).toBe('26 posts');
       expect(loadMoreButton()).toBeNull();
     });
 
     it('shows a short list without a button', async () => {
-      await openWithPosts(posts(1, 3));
+      await openWithPosts(posts(1, 3), { ...alice, postsCount: 3 });
 
-      expect(header()).toBe('3 post(s)');
+      expect(header()).toBe('3 posts');
       expect(loadMoreButton()).toBeNull();
     });
 
+    it.each([
+      [0, '0 posts'],
+      [1, '1 post'],
+      [2, '2 posts'],
+      [1234, '1234 posts'],
+    ])('writes a count of %i as "%s"', async (postsCount, expected) => {
+      await openWithPosts([], { ...alice, postsCount });
+
+      expect(header()).toBe(expected);
+    });
+
     it('says so when the user has not posted yet', async () => {
-      await openWithPosts([]);
+      await openWithPosts([], { ...alice, postsCount: 0 });
 
       expect(el().textContent).toContain("hasn't posted anything yet");
     });
@@ -92,11 +103,13 @@ describe('ProfileComponent', () => {
       const repost = makePost(30, { user: alice, userId: alice.id, retweetedBy: me, isRetweeted: true });
       await openWithPosts([...posts(31, 49, me), repost], me);
       expect(cards()).toHaveLength(20);
+      expect(header()).toBe('20 posts');
 
       cards()[19].querySelector<HTMLButtonElement>('.retweet-btn')!.click();
       http().expectOne(`${API}/retweets/toggle/30`).flush({ retweeted: false });
       await settle();
       expect(cards()).toHaveLength(19);
+      expect(header()).toBe('19 posts'); // adjusted on the spot: no request that could overtake the undo
 
       loadMoreButton()!.click();
       expectPage('/posts/user/1', 19).flush(posts(1, 10, me));
@@ -110,6 +123,10 @@ describe('ProfileComponent', () => {
       cards()[0].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
       http().expectOne(`${API}/posts/49`).flush(null, { status: 204, statusText: 'No Content' });
       await settle();
+      expect(header()).toBe('20 posts'); // until the server has said what the new total is
+      http().expectOne(`${API}/users/profile/me`).flush({ ...me, postsCount: 19 });
+      await settle();
+      expect(header()).toBe('19 posts');
 
       loadMoreButton()!.click();
       expectPage('/posts/user/1', 19).flush([]);
@@ -126,7 +143,67 @@ describe('ProfileComponent', () => {
 
       expect(cards()).toHaveLength(20);
       expect(loadMoreButton()?.textContent?.trim()).toBe('Try again');
-      expect(header()).toBe('20+ post(s)');
+      expect(header()).toBe('26 posts');
+    });
+
+    it("takes the server's word for the new total when a delete removed more than one entry of yours", async () => {
+      // A post you also reposted is two entries of yours; deleting it drops the count by two
+      const both = [makePost(49, { user: me, userId: me.id, retweetedBy: me }), makePost(49, { user: me, userId: me.id })];
+      await openWithPosts([...both, ...posts(31, 48, me)], me);
+
+      cards()[1].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
+      http().expectOne(`${API}/posts/49`).flush(null, { status: 204, statusText: 'No Content' });
+      await settle();
+      http().expectOne(`${API}/users/profile/me`).flush({ ...me, postsCount: 18 });
+      await settle();
+
+      expect(cards()).toHaveLength(18);
+      expect(header()).toBe('18 posts');
+    });
+
+    it('never shows a negative count, even if the number it started from was out of date', async () => {
+      const repost = makePost(30, { user: alice, userId: alice.id, retweetedBy: me, isRetweeted: true });
+      await openWithPosts([repost], { ...me, postsCount: 0 });
+
+      cards()[0].querySelector<HTMLButtonElement>('.retweet-btn')!.click();
+      http().expectOne(`${API}/retweets/toggle/30`).flush({ retweeted: false });
+      await settle();
+
+      expect(header()).toBe('0 posts');
+    });
+
+    it('ignores a late count for a profile you have already left', async () => {
+      await openWithPosts(posts(30, 49, me), me);
+      cards()[0].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
+      http().expectOne(`${API}/posts/49`).flush(null, { status: 204, statusText: 'No Content' });
+      await settle();
+      const late = http().expectOne(`${API}/users/profile/me`); // the new total is still on its way...
+
+      const navigation = harness.navigateByUrl('/profile/alice', ProfileComponent);
+      await settle();
+      answerBackgroundRequests();
+      http().expectOne(`${API}/users/profile/alice`).flush(alice);
+      await navigation;
+      await settle();
+      expectPage('/posts/user/5', 0).flush(posts(7, 26));
+      await settle();
+      late.flush({ ...me, postsCount: 19 }); // ...and arrives while Alice's profile is showing
+      await settle();
+
+      expect(header()).toBe('26 posts');
+    });
+
+    it("does not touch the count when you undo a repost on someone else's profile", async () => {
+      // Undoing YOUR repost of a post shown on Alice's profile changes nothing there
+      await openWithPosts([makePost(30, { user: alice, userId: alice.id, isRetweeted: true }), ...posts(7, 25)]);
+
+      cards()[0].querySelector<HTMLButtonElement>('.retweet-btn')!.click();
+      http().expectOne(`${API}/retweets/toggle/30`).flush({ retweeted: false });
+      await settle();
+
+      expect(cards()).toHaveLength(20);
+      expect(header()).toBe('26 posts');
+      http().expectNone(`${API}/users/profile/alice`);
     });
   });
 
@@ -168,7 +245,7 @@ describe('ProfileComponent', () => {
       tab('Posts').click();
       await settle();
       expect(cards()).toHaveLength(20); // still the first page of posts
-      expect(header()).toBe('20+ post(s)');
+      expect(header()).toBe('26 posts');
     });
 
     it('says so when there are no replies', async () => {
