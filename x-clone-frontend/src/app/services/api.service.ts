@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
-import { User, Post, AuthResponse, AppNotification, MediaUpload, Page } from '../models/types';
+import { User, Post, AuthResponse, AppNotification, MediaUpload, Page, TrendingHashtag } from '../models/types';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
@@ -101,6 +101,16 @@ export class ApiService {
 
   getUserReplies(userId: number, cursor: string | null = null, take = 20): Observable<Page<Post>> {
     return this.http.get<Page<Post>>(`${this.baseUrl}/posts/user/${userId}/replies`, { params: this.pageParams(cursor, take) });
+  }
+
+  /** Posts and replies that use the hashtag (without the #), newest first. */
+  getHashtagPosts(tag: string, cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/hashtag/${encodeURIComponent(tag)}`, { params: this.pageParams(cursor, take) });
+  }
+
+  /** The hashtags most used by posts of the last week. */
+  getTrendingHashtags(take = 5): Observable<TrendingHashtag[]> {
+    return this.http.get<TrendingHashtag[]>(`${this.baseUrl}/hashtags/trending`, { params: new HttpParams().set('take', take) });
   }
 
   createReply(postId: number, content: string, mediaUrls: string[] = []): Observable<Post> {

@@ -51,6 +51,11 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'hashtag/:tag',
+    loadComponent: () => import('./components/hashtag').then(m => m.HashtagComponent),
+    canActivate: [authGuard]
+  },
+  {
     path: 'notifications',
     loadComponent: () => import('./components/notifications').then(m => m.NotificationsComponent),
     canActivate: [authGuard]

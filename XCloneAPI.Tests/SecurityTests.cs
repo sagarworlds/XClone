@@ -48,6 +48,8 @@ public class SecurityTests(ApiFixture api)
     [InlineData("/api/posts/user/1")]
     [InlineData("/api/posts/user/1/replies")]
     [InlineData("/api/likes/post/1")]
+    [InlineData("/api/posts/hashtag/sunset")]
+    [InlineData("/api/hashtags/trending")]
     public async Task PublicReadEndpoints_DoNotDemandLogin(string path)
     {
         var response = await api.Anonymous.GetAsync(path);

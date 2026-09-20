@@ -171,6 +171,30 @@ namespace XCloneAPI.Controllers
             }
         }
 
+        // Posts and replies that use a hashtag, newest first ("sunset" and "#Sunset" are the same tag)
+        [HttpGet("hashtag/{tag}")]
+        [AllowAnonymous]
+        public async Task<ActionResult<PagedResponse<PostResponse>>> GetHashtagPosts(string? tag, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
+        {
+            try
+            {
+                if (!HashtagParser.TryNormalize(tag, out var normalized))
+                    return BadRequest(new { message = "Invalid hashtag" });
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
+                take = Math.Clamp(take, 1, MaxPageSize);
+                var currentUserId = GetCurrentUserId();
+                var posts = await _postService.GetHashtagPostsAsync(normalized, currentUserId, beforeId, take);
+                return Ok(posts);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching hashtag posts: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(int id)
         {

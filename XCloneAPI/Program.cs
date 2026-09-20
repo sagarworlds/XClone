@@ -116,6 +116,7 @@ builder.Services.AddScoped<ILikeService, LikeService>();
 builder.Services.AddScoped<IRetweetService, RetweetService>();
 builder.Services.AddScoped<IFollowService, FollowService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IHashtagService, HashtagService>();
 
 // 8. Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();

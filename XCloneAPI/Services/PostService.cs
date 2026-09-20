@@ -38,7 +38,8 @@ namespace XCloneAPI.Services
                 {
                     UserId = userId,
                     Content = request.Content,
-                    MediaUrls = request.MediaUrls ?? Array.Empty<string>()
+                    MediaUrls = request.MediaUrls ?? Array.Empty<string>(),
+                    Hashtags = HashtagsOf(request.Content)
                 };
 
                 _context.Posts.Add(post);
@@ -77,7 +78,8 @@ namespace XCloneAPI.Services
                     UserId = userId,
                     Content = request.Content,
                     MediaUrls = request.MediaUrls ?? Array.Empty<string>(),
-                    ParentPostId = parentPostId
+                    ParentPostId = parentPostId,
+                    Hashtags = HashtagsOf(request.Content)
                 };
 
                 parent.RepliesCount++;
@@ -216,6 +218,34 @@ namespace XCloneAPI.Services
                 throw;
             }
         }
+
+        // Every post (and reply) that has the hashtag, newest first. The tag is compared in lower case.
+        public async Task<PagedResponse<PostResponse>> GetHashtagPostsAsync(string tag, int currentUserId, int? beforeId, int take)
+        {
+            try
+            {
+                var query = _context.PostHashtags.Where(h => h.Tag == tag);
+                if (beforeId != null)
+                    query = query.Where(h => h.PostId < beforeId);
+
+                var entries = await query
+                    .OrderByDescending(h => h.PostId)
+                    .Take(take + 1)
+                    .Select(h => new TimelineEntry { PostId = h.PostId })
+                    .ToListAsync();
+
+                return await BuildPageAsync(entries, take, currentUserId, e => IdCursor.Encode(e.PostId));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching hashtag posts: {ex.Message}");
+                throw;
+            }
+        }
+
+        // The rows that record a post's hashtags (saved together with the post)
+        private static List<PostHashtag> HashtagsOf(string content) =>
+            HashtagParser.Parse(content).Select(tag => new PostHashtag { Tag = tag }).ToList();
 
         public async Task<bool> DeletePostAsync(int postId, int userId)
         {
