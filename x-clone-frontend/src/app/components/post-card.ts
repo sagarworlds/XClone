@@ -286,7 +286,10 @@ export class PostCardComponent {
     event.stopPropagation();
     if (!confirm('Are you sure you want to delete this post?')) return;
     const id = this.state().id;
-    this.api.deletePost(id).subscribe({ next: () => this.deleted.emit(id) });
+    this.api.deletePost(id).subscribe({
+      next: () => this.deleted.emit(id),
+      error: () => alert('Could not delete the post. Please try again.'),
+    });
   }
 
   readonly formatTime = formatTime;
