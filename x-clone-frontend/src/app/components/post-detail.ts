@@ -126,7 +126,7 @@ export class PostDetailComponent implements OnInit {
   readonly replies = new PagedList<Post>((cursor, take) => this.api.getReplies(this.post()!.id, cursor, take), (p) => String(p.id));
   loading = signal(true);
 
-  readonly createReply = (content: string) => this.api.createReply(this.post()!.id, content);
+  readonly createReply = (content: string, mediaUrls: string[]) => this.api.createReply(this.post()!.id, content, mediaUrls);
 
   ngOnInit(): void {
     // The same component instance is reused when navigating from a post to one of its replies

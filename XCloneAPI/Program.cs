@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using XCloneAPI.Data;
@@ -72,8 +75,9 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 5. Rate limiting (brute-force protection for login/register)
+// 5. Rate limiting (brute-force protection for login/register, and a cap on uploads per user)
 var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
+var uploadPermitLimit = builder.Configuration.GetValue("RateLimiting:UploadPermitLimit", 30);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -86,10 +90,23 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
         httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = authPermitLimit, Window = TimeSpan.FromMinutes(1) }));
+
+    // Uploads are counted per signed-in user (the limiter runs after authentication), falling back to the address
+    options.AddPolicy("upload", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitLimit, Window = TimeSpan.FromMinutes(1) }));
 });
 
-// 5b. Add Controllers
-builder.Services.AddControllers();
+// Uploaded images live in a folder (relative paths are inside the app's folder) and are served from /uploads
+var uploadsDirectory = Path.GetFullPath(
+    builder.Configuration["Uploads:Directory"] ?? "uploads", builder.Environment.ContentRootPath);
+var mediaStorage = new LocalMediaStorage(uploadsDirectory);
+builder.Services.AddSingleton<IMediaStorage>(mediaStorage);
+
+// 5b. Add Controllers. A file parameter would otherwise make its action reachable only with a multipart body, and any
+// other kind of request would get a misleading "Endpoint not found"; this way it reaches the action and is told what is wrong.
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(options => options.SuppressConsumesConstraintForFormFileParameters = true);
 
 // 6. Add Services (Dependency Injection)
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -132,11 +149,30 @@ app.UseHttpsRedirection();
 // 3. CORS Middleware (Must be before Authentication)
 app.UseCors("AllowAngular");
 
-// Rate limiter runs after CORS so 429 responses still carry CORS headers the browser can read
-app.UseRateLimiter();
+// Uploaded images. Only the four image types are served (anything else in the folder is a 404), browsers must not
+// second-guess the type, and the names are never reused so the files can be cached for good.
+var imageTypes = new FileExtensionContentTypeProvider();
+imageTypes.Mappings.Clear();
+foreach (var kind in Enum.GetValues<ImageKind>())
+    imageTypes.Mappings["." + MediaNames.Extension(kind)] = MediaNames.ContentType(kind);
 
-// 4. Authentication & Authorization Middleware
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(mediaStorage.Directory),
+    RequestPath = "/uploads",
+    ContentTypeProvider = imageTypes,
+    ServeUnknownFileTypes = false,
+    OnPrepareResponse = context =>
+    {
+        context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        context.Context.Response.Headers["Cache-Control"] = "public, max-age=31536000, immutable";
+    }
+});
+
+// 4. Authentication, then the rate limiter (so limits can be per user; it still runs after CORS, so 429 responses
+// carry the CORS headers the browser needs to read them), then Authorization
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 // 5. Route Prefix for API

@@ -92,6 +92,31 @@ describe('PostDetailComponent', () => {
     expect(loadMoreButton()).toBeNull();
   });
 
+  describe('replying with images', () => {
+    const image = `/uploads/${'b'.repeat(32)}.jpg`;
+
+    it('uploads a chosen image, and sends its address with the reply', async () => {
+      await openWithReplies(replies(101, 103));
+      const input = el().querySelector<HTMLInputElement>('input[type=file]')!;
+      Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(3)], 'me.jpg', { type: 'image/jpeg' })], configurable: true });
+      input.dispatchEvent(new Event('change'));
+      http().expectOne(`${API}/media`).flush({ url: image });
+      const textarea = el().querySelector('textarea')!;
+      textarea.value = 'Look at this';
+      textarea.dispatchEvent(new Event('input'));
+      await settle();
+
+      el().querySelector<HTMLButtonElement>('.publish-btn')!.click();
+      const reply = http().expectOne((r) => r.method === 'POST' && r.url === `${API}/posts/7/replies`);
+      expect(reply.request.body).toEqual({ content: 'Look at this', mediaUrls: [image] });
+      reply.flush(makePost(200, { user: me, userId: me.id, parentPostId: 7, content: 'Look at this', mediaUrls: [image] }));
+      await settle();
+
+      expect(replyTexts().at(-1)).toBe('Look at this');
+      expect(replyCards().at(-1)!.querySelector('.media-grid img')).not.toBeNull();
+    });
+  });
+
   describe('replying while more replies are still to be loaded', () => {
     const mine = () => makePost(200, { user: me, userId: me.id, parentPostId: 7, content: 'My reply' });
 

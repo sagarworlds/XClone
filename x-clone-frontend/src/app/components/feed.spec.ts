@@ -201,6 +201,31 @@ describe('FeedComponent', () => {
     });
   });
 
+  describe('posting with images', () => {
+    const image = `/uploads/${'a'.repeat(32)}.png`;
+
+    it('uploads a chosen image, and sends its address with the post', async () => {
+      await open(posts(26, 45), after(26));
+      const input = el().querySelector<HTMLInputElement>('input[type=file]')!;
+      Object.defineProperty(input, 'files', { value: [new File([new Uint8Array(3)], 'holiday.png', { type: 'image/png' })], configurable: true });
+      input.dispatchEvent(new Event('change'));
+      http().expectOne(`${API}/media`).flush({ url: image });
+      const textarea = el().querySelector('textarea')!;
+      textarea.value = 'With a picture';
+      textarea.dispatchEvent(new Event('input'));
+      await settle();
+
+      el().querySelector<HTMLButtonElement>('.publish-btn')!.click();
+      const create = http().expectOne((r) => r.method === 'POST' && r.url === `${API}/posts`);
+      expect(create.request.body).toEqual({ content: 'With a picture', mediaUrls: [image] });
+      create.flush(makePost(99, { user: me, userId: me.id, content: 'With a picture', mediaUrls: [image] }));
+      await settle();
+
+      expect(texts()[0]).toBe('With a picture');
+      expect(cards()[0].querySelector('.media-grid img')?.getAttribute('src')).toBe(`http://localhost:5168${image}`);
+    });
+  });
+
   describe('when loading more goes wrong', () => {
     it('keeps the posts, explains, and lets you try again for the same page', async () => {
       await open(posts(26, 45), after(26));

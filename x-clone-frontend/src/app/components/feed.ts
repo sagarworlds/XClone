@@ -63,7 +63,7 @@ export class FeedComponent implements OnInit {
   readonly feed = new PagedList<Post>((cursor, take) => this.api.getFeed(cursor, take), postEntryKey);
   readonly entryKey = postEntryKey;
 
-  readonly createPost = (content: string) => this.api.createPost(content);
+  readonly createPost = (content: string, mediaUrls: string[]) => this.api.createPost(content, mediaUrls);
 
   ngOnInit(): void {
     this.feed.loadFirst();

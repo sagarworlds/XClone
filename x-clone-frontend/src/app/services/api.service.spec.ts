@@ -178,17 +178,48 @@ describe('ApiService', () => {
       }
     });
 
-    it('posts and replies with just the content', () => {
+    it('posts and replies with the text, and no images unless given', () => {
       api.createPost('hello').subscribe();
       const post = http().expectOne(`${API}/posts`);
-      expect(post.request.body).toMatchObject({ content: 'hello' });
+      expect(post.request.body).toEqual({ content: 'hello', mediaUrls: [] });
       post.flush(makePost(1));
 
       api.createReply(1, 'a reply').subscribe();
       const reply = http().expectOne(`${API}/posts/1/replies`);
       expect(reply.request.method).toBe('POST');
-      expect(reply.request.body).toEqual({ content: 'a reply' });
+      expect(reply.request.body).toEqual({ content: 'a reply', mediaUrls: [] });
       reply.flush(makePost(2));
+    });
+
+    it('posts and replies with the images that were uploaded', () => {
+      const images = ['/uploads/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', '/uploads/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.jpg'];
+
+      api.createPost('with pictures', images).subscribe();
+      const post = http().expectOne(`${API}/posts`);
+      expect(post.request.body).toEqual({ content: 'with pictures', mediaUrls: images });
+      post.flush(makePost(1));
+
+      api.createReply(1, 'reply with pictures', images).subscribe();
+      const reply = http().expectOne(`${API}/posts/1/replies`);
+      expect(reply.request.body).toEqual({ content: 'reply with pictures', mediaUrls: images });
+      reply.flush(makePost(2));
+    });
+
+    it('uploads an image as a multipart form with the file in the "file" field, and gives back its address', () => {
+      const file = new File([new Uint8Array([1, 2, 3])], 'holiday.png', { type: 'image/png' });
+      let answer: { url: string } | undefined;
+
+      api.uploadMedia(file).subscribe((result) => (answer = result));
+      const upload = http().expectOne(`${API}/media`);
+
+      expect(upload.request.method).toBe('POST');
+      expect(upload.request.body).toBeInstanceOf(FormData);
+      const sent = (upload.request.body as FormData).get('file') as File;
+      expect(sent.name).toBe('holiday.png');
+      expect(sent.size).toBe(3);
+      expect((upload.request.body as FormData).getAll('file')).toHaveLength(1);
+      upload.flush({ url: '/uploads/cccccccccccccccccccccccccccccccc.png' });
+      expect(answer).toEqual({ url: '/uploads/cccccccccccccccccccccccccccccccc.png' });
     });
 
     it('keeps the stored user in step when the profile is updated', () => {
