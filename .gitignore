@@ -364,3 +364,6 @@ FodyWeavers.xsd
 
 # Local project notes for Claude Code (progress tracking); not part of the repository
 CLAUDE.md
+
+# Images uploaded while developing locally
+XCloneAPI/uploads/

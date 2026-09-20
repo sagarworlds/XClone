@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
-import { User, Post, AuthResponse, AppNotification, Page } from '../models/types';
+import { User, Post, AuthResponse, AppNotification, MediaUpload, Page } from '../models/types';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
@@ -103,8 +103,15 @@ export class ApiService {
     return this.http.get<Page<Post>>(`${this.baseUrl}/posts/user/${userId}/replies`, { params: this.pageParams(cursor, take) });
   }
 
-  createReply(postId: number, content: string): Observable<Post> {
-    return this.http.post<Post>(`${this.baseUrl}/posts/${postId}/replies`, { content });
+  createReply(postId: number, content: string, mediaUrls: string[] = []): Observable<Post> {
+    return this.http.post<Post>(`${this.baseUrl}/posts/${postId}/replies`, { content, mediaUrls });
+  }
+
+  /** Uploads one image; the answer's url is what a post's mediaUrls take. */
+  uploadMedia(file: File): Observable<MediaUpload> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.http.post<MediaUpload>(`${this.baseUrl}/media`, form);
   }
 
   createPost(content: string, mediaUrls: string[] = []): Observable<Post> {

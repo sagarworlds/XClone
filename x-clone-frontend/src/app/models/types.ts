@@ -33,6 +33,11 @@ export interface Post {
   retweetedBy: User | null;
 }
 
+/** What the API answers to an image upload: the address to attach to a post. */
+export interface MediaUpload {
+  url: string;
+}
+
 export interface AuthResponse {
   id: number;
   username: string;

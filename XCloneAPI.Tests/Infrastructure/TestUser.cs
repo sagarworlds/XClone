@@ -82,6 +82,28 @@ public sealed class TestUser
 
     public Task<PostResponse> GetPostAsync(int postId) => GetAsync<PostResponse>($"/api/posts/{postId}");
 
+    /// <summary>Uploads an image (asserting success) and returns the address to attach to a post.</summary>
+    public async Task<string> UploadImageAsync(byte[]? bytes = null, string fileName = "picture.png", string contentType = "image/png")
+    {
+        var response = await Client.UploadAsync(bytes ?? SampleImages.Png, fileName, contentType);
+        await response.ShouldBeAsync(HttpStatusCode.OK);
+        return (await response.ReadAsync<MediaResponseDto>()).Url;
+    }
+
+    public async Task<PostResponse> CreatePostWithImagesAsync(string content, params string[] mediaUrls)
+    {
+        var response = await PostAsync("/api/posts", new { content, mediaUrls });
+        await response.ShouldBeAsync(HttpStatusCode.Created);
+        return await response.ReadAsync<PostResponse>();
+    }
+
+    public async Task<PostResponse> ReplyWithImagesAsync(int postId, string content, params string[] mediaUrls)
+    {
+        var response = await PostAsync($"/api/posts/{postId}/replies", new { content, mediaUrls });
+        await response.ShouldBeAsync(HttpStatusCode.Created);
+        return await response.ReadAsync<PostResponse>();
+    }
+
     public async Task FollowAsync(TestUser other)
     {
         var response = await PostAsync($"/api/follows/toggle/{other.Id}");
@@ -170,6 +192,31 @@ public static class PagingExtensions
 
     public static Task<List<PagedResponse<T>>> ReadAllPagesAsync<T>(this TestUser user, string path, int take) =>
         user.Client.ReadAllPagesAsync<T>(path, take);
+}
+
+/// <summary>What POST /api/media answers.</summary>
+public sealed record MediaResponseDto(string Url);
+
+public static class UploadExtensions
+{
+    /// <summary>POSTs one file as a multipart form, the way a browser's file input does.</summary>
+    public static Task<HttpResponseMessage> UploadAsync(this HttpClient client, byte[] bytes, string fileName = "picture.png", string contentType = "image/png", string field = "file")
+    {
+        var file = new ByteArrayContent(bytes);
+        file.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+        var form = new MultipartFormDataContent { { file, field, fileName } };
+        return client.PostAsync("/api/media", form);
+    }
+}
+
+/// <summary>Small files that start the way real images do (only the start is looked at).</summary>
+public static class SampleImages
+{
+    // A real 1x1 image where a tiny one is easy to write down; JPEG and WebP are just their signatures plus filler
+    public static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
+    public static readonly byte[] Gif = Convert.FromBase64String("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7");
+    public static readonly byte[] Jpeg = { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xD9 };
+    public static readonly byte[] Webp = { 0x52, 0x49, 0x46, 0x46, 0x16, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x20, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 }
 
 public static class HttpResponseExtensions

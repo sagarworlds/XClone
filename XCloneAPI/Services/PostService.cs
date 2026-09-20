@@ -8,11 +8,13 @@ namespace XCloneAPI.Services
     public class PostService : IPostService
     {
         private readonly AppDbContext _context;
+        private readonly IMediaStorage _media;
         private readonly ILogger<PostService> _logger;
 
-        public PostService(AppDbContext context, ILogger<PostService> logger)
+        public PostService(AppDbContext context, IMediaStorage media, ILogger<PostService> logger)
         {
             _context = context;
+            _media = media;
             _logger = logger;
         }
 
@@ -30,6 +32,7 @@ namespace XCloneAPI.Services
             {
                 if (string.IsNullOrWhiteSpace(request.Content))
                     throw new ArgumentException("Post content cannot be empty");
+                EnsureImagesExist(request.MediaUrls);
 
                 var post = new Post
                 {
@@ -63,6 +66,7 @@ namespace XCloneAPI.Services
             {
                 if (string.IsNullOrWhiteSpace(request.Content))
                     throw new ArgumentException("Post content cannot be empty");
+                EnsureImagesExist(request.MediaUrls);
 
                 var parent = await _context.Posts.Include(p => p.User).FirstOrDefaultAsync(p => p.Id == parentPostId);
                 if (parent == null)
@@ -221,7 +225,10 @@ namespace XCloneAPI.Services
                 if (post == null || post.UserId != userId)
                     return false;
 
-                // Replies, retweets and likes of this post are removed by the database (cascade).
+                // Replies, retweets and likes of this post are removed by the database (cascade), and so are the
+                // images of the post and of all its replies, once the delete has succeeded.
+                var imageNames = await ImageNamesOfThreadAsync(post);
+
                 if (post.ParentPostId != null)
                 {
                     var parent = await _context.Posts.FindAsync(post.ParentPostId);
@@ -231,6 +238,7 @@ namespace XCloneAPI.Services
 
                 _context.Posts.Remove(post);
                 await _context.SaveChangesAsync();
+                DeleteImages(imageNames);
 
                 _logger.LogInformation($"Post {postId} deleted by user {userId}");
                 return true;
@@ -239,6 +247,64 @@ namespace XCloneAPI.Services
             {
                 _logger.LogError($"Error deleting post: {ex.Message}");
                 throw;
+            }
+        }
+
+        // A post can only carry images that were uploaded here and are still there
+        private void EnsureImagesExist(string[]? mediaUrls)
+        {
+            foreach (var url in mediaUrls ?? Array.Empty<string>())
+            {
+                if (!MediaNames.TryGetName(url, out var name) || !_media.Exists(name))
+                    throw new ArgumentException("An attached image was not found. Upload it again.");
+            }
+        }
+
+        // The uploaded images of a post and of every reply below it (they all go when the post is deleted)
+        private async Task<List<string>> ImageNamesOfThreadAsync(Post post)
+        {
+            var names = new List<string>();
+            AddImageNames(names, post.MediaUrls);
+
+            var level = new List<int> { post.Id };
+            while (level.Count > 0)
+            {
+                var replies = await _context.Posts
+                    .Where(p => p.ParentPostId != null && level.Contains(p.ParentPostId.Value))
+                    .Select(p => new { p.Id, p.MediaUrls })
+                    .ToListAsync();
+
+                foreach (var reply in replies)
+                    AddImageNames(names, reply.MediaUrls);
+
+                level = replies.Select(r => r.Id).ToList();
+            }
+
+            return names;
+        }
+
+        private static void AddImageNames(List<string> names, string[]? mediaUrls)
+        {
+            foreach (var url in mediaUrls ?? Array.Empty<string>())
+            {
+                if (MediaNames.TryGetName(url, out var name))
+                    names.Add(name);
+            }
+        }
+
+        // The post is already gone, so a file that cannot be removed is only logged (it is just clutter)
+        private void DeleteImages(List<string> names)
+        {
+            foreach (var name in names.Distinct())
+            {
+                try
+                {
+                    _media.Delete(name);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning($"Could not remove image {name}: {ex.Message}");
+                }
             }
         }
 

@@ -43,20 +43,17 @@ public class PostsTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task CreatePost_OnlyAcceptsHttpUrlsAsMedia()
+    public async Task CreatePost_MediaIsOptional_AndAnythingButAnUploadedImageIsRefused()
     {
         var alice = await api.RegisterAsync("alice");
-
-        await (await alice.PostAsync("/api/posts", new { content = "x", mediaUrls = new[] { "javascript:alert(1)" } })).ShouldBeAsync(HttpStatusCode.BadRequest);
-        await (await alice.PostAsync("/api/posts", new { content = "x", mediaUrls = new[] { "https://example.com/ok.png", "nope" } })).ShouldBeAsync(HttpStatusCode.BadRequest);
-
-        var ok = await alice.PostAsync("/api/posts", new { content = "with a picture", mediaUrls = new[] { "https://example.com/ok.png" } });
-        await ok.ShouldBeAsync(HttpStatusCode.Created);
-        Assert.Equal(new[] { "https://example.com/ok.png" }, (await ok.ReadAsync<PostResponse>()).MediaUrls);
 
         // Media is optional.
         var plain = await alice.CreatePostAsync("no media");
         Assert.Empty(plain.MediaUrls);
+
+        // Only images uploaded through /api/media can be attached (see MediaTests for all the cases).
+        await (await alice.PostAsync("/api/posts", new { content = "x", mediaUrls = new[] { "javascript:alert(1)" } })).ShouldBeAsync(HttpStatusCode.BadRequest);
+        await (await alice.PostAsync("/api/posts", new { content = "x", mediaUrls = new[] { "https://example.com/ok.png" } })).ShouldBeAsync(HttpStatusCode.BadRequest);
     }
 
     [Fact]

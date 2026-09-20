@@ -21,6 +21,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Home Timeline Feed**: A live feed of posts from the users you follow, featuring a character-limited (280 chars) tweet composer.
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
 - **Load more**: The home timeline, profile tabs, reply threads and notifications load 20 entries at a time with a "Load more" button. Pages are read with cursors, so posting, deleting or undoing a repost in between (or other people doing the same) can never repeat or skip an entry, and a failed page can be retried without losing what is already on screen.
+- **Images**: Attach up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each) to a post or a reply. They upload as soon as you pick them, with a preview you can remove, and show in a grid on the post; clicking one opens the full picture in a new tab.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **Notifications**: You are told when someone replies to or reposts one of your posts (never for your own actions). The sidebar shows an unread badge that refreshes every 30 seconds, and the Notifications page lists everything newest first, highlights what is new, and marks it all as read when you open it. Undoing a repost, or deleting the reply or the post, takes its notification back.
@@ -143,6 +144,21 @@ dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
 
 ---
 
+### Image uploads (API)
+
+Images are uploaded first and attached afterwards:
+
+```
+POST /api/media            multipart form, field "file"  -> { "url": "/uploads/3f2a...c1.png" }
+POST /api/posts            { "content": "...", "mediaUrls": ["/uploads/3f2a...c1.png"] }
+GET  /uploads/3f2a...c1.png                               -> the image (public, cached for good)
+```
+
+- The server checks the **file itself** (its first bytes), never its name or content type: only PNG, JPEG, GIF and WebP are accepted (no SVG, which can carry scripts), up to 5 MB. It names the file itself (a random 32-character name), so nothing the client sends reaches the disk path.
+- A post takes at most 4 images, each one an address this API handed out (none twice, none from other sites), and they must still exist. Deleting a post also deletes the images of the post and of all its replies.
+- Images are served only from `/uploads`, with `X-Content-Type-Options: nosniff`; anything else that happens to be in the folder is a 404. Uploading needs a login and is limited per user (`RateLimiting:UploadPermitLimit`, default 30 a minute).
+- They are stored in the folder `Uploads:Directory` (default `XCloneAPI/uploads`, git-ignored). That suits one server; several servers would need a shared store behind `IMediaStorage`.
+
 ### Paged lists (API)
 
 The lists that grow without limit are read with cursors instead of `skip`: the home feed (`GET /api/posts/feed`), a profile's posts and replies (`GET /api/posts/user/{id}` and `.../replies`), a post's replies (`GET /api/posts/{id}/replies`), the notifications (`GET /api/notifications`), and a user's followers and following (`GET /api/users/{id}/followers` and `.../following`, newest follow first).
@@ -169,7 +185,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests
@@ -184,6 +200,7 @@ npm test
 - **Paging:** `PagedList` (cursors, adding and removing entries locally, duplicates, cancelling, retry) and the Load more button, plus the feed, profile tabs and reply threads that use them.
 - **People lists:** the followers/following page (both tabs, paging, empty and failing lists, switching profiles, the route matcher), the shared user row with its follow button, and the sidebar search and "Who to follow" widgets.
 - **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
+- **Composer and images:** choosing, uploading, previewing and removing images, the limits, failing uploads, and that posting waits for uploads; the address helper that only ever loads our own images.
 - **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.
 

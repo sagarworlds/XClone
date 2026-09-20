@@ -123,6 +123,89 @@ describe('PostCardComponent', () => {
     });
   });
 
+  describe('images', () => {
+    const image = (letter: string, extension = 'png') => `/uploads/${letter.repeat(32)}.${extension}`;
+    const grid = () => el().querySelector<HTMLElement>('.media-grid');
+    const pictures = () => [...el().querySelectorAll<HTMLImageElement>('.media-grid img')];
+    const sources = () => pictures().map((p) => p.getAttribute('src'));
+
+    it('shows nothing where a post has no images', async () => {
+      await show(makePost(7, { mediaUrls: [] }));
+
+      expect(grid()).toBeNull();
+    });
+
+    it('loads an image from the API, not from the page, with a description, lazily', async () => {
+      await show(makePost(7, { mediaUrls: [image('a')] }));
+
+      expect(sources()).toEqual([`http://localhost:5168${image('a')}`]);
+      expect(pictures()[0].alt).toBe('Attached image');
+      expect(pictures()[0].getAttribute('loading')).toBe('lazy');
+    });
+
+    it('links each image to the full picture in a new tab that cannot reach back to the app', async () => {
+      await show(makePost(7, { mediaUrls: [image('a')] }));
+
+      const link = el().querySelector<HTMLAnchorElement>('.media-item')!;
+
+      expect(link.getAttribute('href')).toBe(`http://localhost:5168${image('a')}`);
+      expect(link.target).toBe('_blank');
+      expect(link.rel).toBe('noopener noreferrer');
+    });
+
+    it.each([1, 2, 3, 4])('lays out %i image(s) in a grid of that size', async (count) => {
+      const urls = Array.from({ length: count }, (_, i) => image('abcd'[i]));
+      await show(makePost(7, { mediaUrls: urls }));
+
+      expect(grid()!.classList).toContain(`count-${count}`);
+      expect(pictures()).toHaveLength(count);
+      expect(sources()).toEqual(urls.map((u) => `http://localhost:5168${u}`)); // in the order of the post
+    });
+
+    it('shows the text before the images', async () => {
+      await show(makePost(7, { content: 'caption', mediaUrls: [image('a')] }));
+
+      const text = el().querySelector('.post-text-content')!;
+      expect(text.nextElementSibling).toBe(grid());
+    });
+
+    it('leaves out pictures that are not ours, such as old posts that point at another site', async () => {
+      await show(makePost(7, { mediaUrls: ['https://tracker.example/pixel.png', image('a'), 'javascript:alert(1)', 'data:image/png;base64,AAAA'] }));
+
+      expect(sources()).toEqual([`http://localhost:5168${image('a')}`]);
+      expect(grid()!.classList).toContain('count-1');
+    });
+
+    it('shows no grid at all when none of the pictures are ours', async () => {
+      await show(makePost(7, { mediaUrls: ['https://tracker.example/pixel.png'] }));
+
+      expect(grid()).toBeNull();
+      expect(el().querySelector('img[src*="tracker"]')).toBeNull();
+    });
+
+    it('copes with a post that has no list of images at all', async () => {
+      await show(makePost(7, { mediaUrls: undefined as unknown as string[] }));
+
+      expect(grid()).toBeNull();
+    });
+
+    it('does not open the thread when an image is clicked', async () => {
+      await show(makePost(7, { mediaUrls: [image('a')] }));
+      const link = el().querySelector<HTMLAnchorElement>('.media-item')!;
+      link.addEventListener('click', (event) => event.preventDefault()); // do not really leave the test page
+
+      link.click();
+
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('shows them on the main post of a thread too', async () => {
+      await show(makePost(7, { mediaUrls: [image('a'), image('b')] }), true);
+
+      expect(pictures()).toHaveLength(2);
+    });
+  });
+
   describe('delete', () => {
     it('is offered on your own posts only', async () => {
       await show(makePost(7, { user: me, userId: me.id }));

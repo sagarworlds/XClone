@@ -3,6 +3,7 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
 import { Post } from '../models/types';
 import { formatTime } from '../utils/format-time';
+import { mediaSrc } from '../utils/media-url';
 
 /**
  * Identifies an entry of a timeline. The same post can appear twice (the original and someone's repost of it),
@@ -59,6 +60,16 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
           }
 
           <p class="post-text-content">{{ p.content }}</p>
+
+          @if (images().length > 0) {
+            <div class="media-grid" [class]="'media-grid count-' + images().length">
+              @for (image of images(); track image) {
+                <a class="media-item" [href]="image" target="_blank" rel="noopener noreferrer">
+                  <img [src]="image" alt="Attached image" loading="lazy" />
+                </a>
+              }
+            </div>
+          }
 
           <div class="post-actions">
             <button class="action-btn comment-btn" title="Reply" (click)="openThread($event)">
@@ -181,6 +192,36 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
     .focus .post-text-content {
       font-size: 1.25rem;
     }
+    .media-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+      margin-bottom: 12px;
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    .media-grid.count-1 {
+      grid-template-columns: 1fr;
+    }
+    .media-grid.count-3 .media-item:first-child {
+      grid-column: span 2;
+    }
+    .media-item {
+      display: block;
+      aspect-ratio: 16 / 9;
+      background-color: var(--bg-secondary);
+    }
+    .media-grid.count-1 .media-item {
+      aspect-ratio: auto;
+      max-height: 480px;
+    }
+    .media-item img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
     .post-actions {
       display: flex;
       justify-content: space-between;
@@ -241,6 +282,10 @@ export class PostCardComponent {
   // Local copy so optimistic updates re-render; it resets whenever the parent passes a new post.
   readonly state = linkedSignal(() => this.post());
   readonly isOwn = computed(() => this.currentUser()?.id === this.state().userId);
+  /** The post's images, as addresses to load them from (pictures that are not ours are left out). */
+  readonly images = computed(() =>
+    (this.state().mediaUrls ?? []).map(mediaSrc).filter((src): src is string => src !== null),
+  );
 
   open(event: MouseEvent): void {
     if (this.focus()) return;
