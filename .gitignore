@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Local project notes for Claude Code (progress tracking); not part of the repository
+CLAUDE.md
