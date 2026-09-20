@@ -8,6 +8,7 @@ namespace XCloneAPI.DTOs
         [StringLength(280)]
         public string Content { get; set; }
 
-        public string[] MediaUrls { get; set; }
+        [HttpUrl]
+        public string[]? MediaUrls { get; set; }
     }
 }

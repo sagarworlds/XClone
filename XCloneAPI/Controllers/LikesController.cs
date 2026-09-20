@@ -12,6 +12,7 @@ namespace XCloneAPI.Controllers
     {
         private readonly ILikeService _likeService;
         private readonly ILogger<LikesController> _logger;
+        private const int MaxPageSize = 50;
 
         public LikesController(ILikeService likeService, ILogger<LikesController> logger)
         {
@@ -50,6 +51,8 @@ namespace XCloneAPI.Controllers
         {
             try
             {
+                skip = Math.Max(skip, 0);
+                take = Math.Clamp(take, 1, MaxPageSize);
                 var likes = await _likeService.GetPostLikesAsync(postId, skip, take);
                 return Ok(likes);
             }

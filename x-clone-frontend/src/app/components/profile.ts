@@ -246,6 +246,10 @@ import { Post, User } from '../models/types';
               <label>Avatar Image URL</label>
               <input type="text" [(ngModel)]="editForm.avatarUrl" placeholder="https://..." />
             </div>
+
+            @if (saveError()) {
+              <p class="modal-error">{{ saveError() }}</p>
+            }
           </div>
         </div>
       </div>
@@ -454,6 +458,11 @@ import { Post, User } from '../models/types';
     .save-btn:hover {
       opacity: 0.9;
     }
+    .modal-error {
+      color: #f4212e;
+      font-size: 14px;
+      margin: 0;
+    }
     .modal-body {
       padding: 24px;
       overflow-y: auto;
@@ -634,6 +643,7 @@ export class ProfileComponent implements OnInit {
   // Edit Modal State
   showEditModal = signal(false);
   savingProfile = signal(false);
+  saveError = signal<string | null>(null);
   editForm = {
     displayName: '',
     bio: '',
@@ -737,6 +747,7 @@ export class ProfileComponent implements OnInit {
         bio: prof.bio || '',
         avatarUrl: prof.avatarUrl || ''
       };
+      this.saveError.set(null);
       this.showEditModal.set(true);
     }
   }
@@ -748,6 +759,7 @@ export class ProfileComponent implements OnInit {
   saveProfile(): void {
     if (!this.editForm.displayName.trim()) return;
     this.savingProfile.set(true);
+    this.saveError.set(null);
 
     this.api.updateProfile(this.editForm).subscribe({
       next: (updatedUser) => {
@@ -755,8 +767,11 @@ export class ProfileComponent implements OnInit {
         this.savingProfile.set(false);
         this.closeEditModal();
       },
-      error: () => {
+      error: (err) => {
         this.savingProfile.set(false);
+        this.saveError.set(
+          err.error?.errors?.AvatarUrl?.[0] || err.error?.message || 'Could not save your profile. Please try again.'
+        );
       }
     });
   }

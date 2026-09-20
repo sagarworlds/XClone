@@ -57,7 +57,6 @@ XClone/
 - **Framework**: ASP.NET Core 10.0
 - **Database**: PostgreSQL (via Npgsql Entity Framework Core Provider)
 - **Authentication**: JWT Bearer Authentication
-- **Object Mapping**: AutoMapper (optional)
 
 ### Frontend
 - **Framework**: Angular 19+ (Standalone API & Signals)
@@ -76,16 +75,26 @@ XClone/
 
 ---
 
+### Configure Secrets
+
+The repository only contains placeholders (`CHANGE-ME...`) for the database password and the JWT signing key. Your real values live **outside the repo** in the .NET user-secrets store, which is loaded automatically when the API runs in Development. The API refuses to start while a placeholder is still in use.
+
+```bash
+cd XCloneAPI
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=x_clone_db;Username=postgres;Password=YOUR_PASSWORD"
+dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
+```
+
+- Visual Studio: right-click the `XCloneAPI` project and choose **Manage User Secrets**.
+- Any other environment: set the `ConnectionStrings__DefaultConnection` and `Jwt__Key` environment variables instead.
+- Never put real values in `appsettings*.json`; those files are committed.
+
+---
+
 ### Database Setup
 
-1. Make sure your PostgreSQL server is running.
-2. Open `XCloneAPI/appsettings.json` and configure your database connection string:
-   ```json
-   "ConnectionStrings": {
-       "DefaultConnection": "Host=localhost;Port=5432;Database=x_clone_db;Username=postgres;Password=YOUR_PASSWORD"
-   }
-   ```
-3. Run the migrations to initialize the database:
+1. Make sure your PostgreSQL server is running and the secrets above are configured.
+2. Run the migrations to initialize the database:
    ```bash
    cd XCloneAPI
    dotnet ef database update
@@ -103,7 +112,7 @@ XClone/
    ```bash
    dotnet run
    ```
-   *The API will start and listen on `http://localhost:5000` (or `https://localhost:7040` depending on launch profile).* 
+   *The API will start and listen on `http://localhost:5168` (or `https://localhost:7040` depending on launch profile). The frontend is configured for `http://localhost:5168/api` in `src/environments/`.*
 
 ---
 

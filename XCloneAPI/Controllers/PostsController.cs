@@ -13,6 +13,7 @@ namespace XCloneAPI.Controllers
     {
         private readonly IPostService _postService;
         private readonly ILogger<PostsController> _logger;
+        private const int MaxPageSize = 50;
 
         public PostsController(IPostService postService, ILogger<PostsController> logger)
         {
@@ -69,6 +70,8 @@ namespace XCloneAPI.Controllers
         {
             try
             {
+                skip = Math.Max(skip, 0);
+                take = Math.Clamp(take, 1, MaxPageSize);
                 var userId = GetCurrentUserId();
                 var posts = await _postService.GetFeedAsync(userId, skip, take);
                 return Ok(posts);
@@ -86,6 +89,8 @@ namespace XCloneAPI.Controllers
         {
             try
             {
+                skip = Math.Max(skip, 0);
+                take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
                 var posts = await _postService.GetUserPostsAsync(userId, currentUserId, skip, take);
                 return Ok(posts);

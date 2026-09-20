@@ -33,14 +33,14 @@ namespace XCloneAPI.Models
 
         [Column("display_name")]
         [StringLength(100)]
-        public string DisplayName { get; set; }
+        public string DisplayName { get; set; } = string.Empty;
 
         [Column("bio")]
-        public string Bio { get; set; }
+        public string Bio { get; set; } = string.Empty;
 
         [Column("avatar_url")]
         [StringLength(500)]
-        public string AvatarUrl { get; set; }
+        public string AvatarUrl { get; set; } = string.Empty;
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

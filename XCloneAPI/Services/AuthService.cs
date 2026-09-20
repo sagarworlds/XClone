@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
@@ -14,6 +15,10 @@ namespace XCloneAPI.Services
         private readonly AppDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AuthService> _logger;
+        private readonly PasswordHasher<User> _passwordHasher = new();
+
+        // Verified against when the account doesn't exist, so a missing user takes as long as a wrong password.
+        private static readonly string DummyHash = new PasswordHasher<User>().HashPassword(new User(), Guid.NewGuid().ToString("N"));
 
         public AuthService(AppDbContext context, IConfiguration configuration, ILogger<AuthService> logger)
         {
@@ -38,9 +43,10 @@ namespace XCloneAPI.Services
                 {
                     Username = request.Username,
                     Email = request.Email,
-                    DisplayName = request.DisplayName ?? request.Username,
-                    PasswordHash = HashPassword(request.Password)
+                    DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? request.Username : request.DisplayName,
+                    Bio = request.Bio ?? string.Empty
                 };
+                user.PasswordHash = _passwordHasher.HashPassword(user, request.Password);
 
                 _context.Users.Add(user);
                 await _context.SaveChangesAsync();
@@ -73,9 +79,16 @@ namespace XCloneAPI.Services
         {
             try
             {
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-                if (user == null || !VerifyPassword(request.Password, user.PasswordHash))
-                    throw new UnauthorizedAccessException("Invalid email or password");
+                var user = await _context.Users.FirstOrDefaultAsync(u =>
+                    u.Email == request.UsernameOrEmail || u.Username == request.UsernameOrEmail);
+                if (user == null)
+                {
+                    _passwordHasher.VerifyHashedPassword(new User(), DummyHash, request.Password);
+                    throw new UnauthorizedAccessException("Invalid username/email or password");
+                }
+
+                if (!await VerifyPasswordAsync(user, request.Password))
+                    throw new UnauthorizedAccessException("Invalid username/email or password");
 
                 _logger.LogInformation($"User logged in: {user.Email}");
 
@@ -124,19 +137,40 @@ namespace XCloneAPI.Services
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
-        private string HashPassword(string password)
+        // Accounts created before the switch to PBKDF2 hold an unsalted SHA-256 hash (base64 of 32 bytes = 44 chars).
+        // Those are verified once and upgraded to the current hash format on a successful login.
+        private async Task<bool> VerifyPasswordAsync(User user, string password)
         {
-            using (var sha256 = SHA256.Create())
+            if (IsLegacyHash(user.PasswordHash))
             {
-                var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-                return Convert.ToBase64String(hashedBytes);
+                var expected = Convert.FromBase64String(user.PasswordHash);
+                var actual = SHA256.HashData(Encoding.UTF8.GetBytes(password));
+                if (!CryptographicOperations.FixedTimeEquals(expected, actual))
+                    return false;
+
+                user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation($"Upgraded password hash for user {user.Id}");
+                return true;
             }
+
+            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            if (result == PasswordVerificationResult.Failed)
+                return false;
+
+            if (result == PasswordVerificationResult.SuccessRehashNeeded)
+            {
+                user.PasswordHash = _passwordHasher.HashPassword(user, password);
+                await _context.SaveChangesAsync();
+            }
+
+            return true;
         }
 
-        private bool VerifyPassword(string password, string hash)
+        private static bool IsLegacyHash(string hash)
         {
-            var hashOfInput = HashPassword(password);
-            return hashOfInput.Equals(hash);
+            var buffer = new byte[32];
+            return hash.Length == 44 && Convert.TryFromBase64String(hash, buffer, out var written) && written == 32;
         }
     }
 }

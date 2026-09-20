@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Threading.RateLimiting;
 using XCloneAPI.Data;
 using XCloneAPI.Services;
 
@@ -10,13 +11,30 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container
 
+// Values committed to the repo are placeholders containing this marker; real values come from
+// user-secrets (Development) or environment variables, and the app refuses to start with a placeholder.
+const string PlaceholderMarker = "CHANGE-ME";
+
 // 1. Database Configuration
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (string.IsNullOrWhiteSpace(connectionString) || connectionString.Contains(PlaceholderMarker, StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException(
+        "ConnectionStrings:DefaultConnection is missing or still the placeholder from appsettings.json. In development run: " +
+        "dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"Host=localhost;Port=5432;Database=x_clone_db;Username=postgres;Password=<your password>\". " +
+        "In other environments set the ConnectionStrings__DefaultConnection environment variable.");
+
+builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connectionString));
 
 // 2. JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]);
+var jwtKey = jwtSettings["Key"];
+if (string.IsNullOrWhiteSpace(jwtKey)
+    || Encoding.UTF8.GetByteCount(jwtKey) < 32
+    || jwtKey.Contains(PlaceholderMarker, StringComparison.OrdinalIgnoreCase))
+    throw new InvalidOperationException(
+        "Jwt:Key is missing, shorter than 32 bytes, or still the placeholder from appsettings.json. In development run: dotnet user-secrets set \"Jwt:Key\" \"<random string of 64+ characters>\". " +
+        "In other environments set the Jwt__Key environment variable.");
+var secretKey = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
 {
@@ -54,7 +72,22 @@ builder.Services.AddCors(options =>
     });
 });
 
-// 5. Add Controllers
+// 5. Rate limiting (brute-force protection for login/register)
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new { message = "Too many attempts. Please try again in a minute." }, cancellationToken);
+    };
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+});
+
+// 5b. Add Controllers
 builder.Services.AddControllers();
 
 // 6. Add Services (Dependency Injection)
@@ -63,9 +96,6 @@ builder.Services.AddScoped<IPostService, PostService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ILikeService, LikeService>();
 builder.Services.AddScoped<IFollowService, FollowService>();
-
-// 7. AutoMapper Configuration (Optional - only if you use AutoMapper)
-// builder.Services.AddAutoMapper(typeof(Program));
 
 // 8. Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();
@@ -98,6 +128,9 @@ app.UseHttpsRedirection();
 
 // 3. CORS Middleware (Must be before Authentication)
 app.UseCors("AllowAngular");
+
+// Rate limiter runs after CORS so 429 responses still carry CORS headers the browser can read
+app.UseRateLimiter();
 
 // 4. Authentication & Authorization Middleware
 app.UseAuthentication();

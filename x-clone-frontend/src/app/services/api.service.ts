@@ -56,9 +56,22 @@ export class ApiService {
   }
 
   private handleAuthSuccess(res: AuthResponse): void {
+    // The auth endpoints return a flat payload; the fields not included default until the profile is loaded.
+    const user: User = {
+      id: res.id,
+      username: res.username,
+      email: res.email,
+      displayName: res.displayName,
+      avatarUrl: res.avatarUrl,
+      bio: '',
+      createdAt: '',
+      followersCount: 0,
+      followingCount: 0,
+      isFollowed: false,
+    };
     localStorage.setItem('token', res.token);
-    localStorage.setItem('user', JSON.stringify(res.user));
-    this.currentUser.set(res.user);
+    localStorage.setItem('user', JSON.stringify(user));
+    this.currentUser.set(user);
     this.isAuthenticated.set(true);
   }
 
@@ -81,30 +94,38 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/posts/${id}`);
   }
 
-  // Likes Methods
-  likePost(postId: number): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/likes/${postId}`, {});
+  // Likes Methods (the API exposes a single toggle endpoint)
+  likePost(postId: number): Observable<{ liked: boolean }> {
+    return this.toggleLike(postId);
   }
 
-  unlikePost(postId: number): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/likes/${postId}`);
+  unlikePost(postId: number): Observable<{ liked: boolean }> {
+    return this.toggleLike(postId);
   }
 
-  // Follows Methods
-  followUser(userId: number): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/follows/${userId}`, {});
+  private toggleLike(postId: number): Observable<{ liked: boolean }> {
+    return this.http.post<{ liked: boolean }>(`${this.baseUrl}/likes/toggle/${postId}`, {});
   }
 
-  unfollowUser(userId: number): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/follows/${userId}`);
+  // Follows Methods (the API exposes a single toggle endpoint)
+  followUser(userId: number): Observable<{ followed: boolean }> {
+    return this.toggleFollow(userId);
+  }
+
+  unfollowUser(userId: number): Observable<{ followed: boolean }> {
+    return this.toggleFollow(userId);
+  }
+
+  private toggleFollow(userId: number): Observable<{ followed: boolean }> {
+    return this.http.post<{ followed: boolean }>(`${this.baseUrl}/follows/toggle/${userId}`, {});
   }
 
   getFollowers(userId: number): Observable<User[]> {
-    return this.http.get<User[]>(`${this.baseUrl}/follows/${userId}/followers`);
+    return this.http.get<User[]>(`${this.baseUrl}/users/${userId}/followers`);
   }
 
   getFollowing(userId: number): Observable<User[]> {
-    return this.http.get<User[]>(`${this.baseUrl}/follows/${userId}/following`);
+    return this.http.get<User[]>(`${this.baseUrl}/users/${userId}/following`);
   }
 
   // Users Methods
@@ -128,6 +149,11 @@ export class ApiService {
         this.currentUser.set(user);
       }),
     );
+  }
+
+  getSuggestions(take = 4): Observable<User[]> {
+    const params = new HttpParams().set('take', take);
+    return this.http.get<User[]>(`${this.baseUrl}/users/suggestions`, { params });
   }
 
   searchUsers(query: string): Observable<User[]> {

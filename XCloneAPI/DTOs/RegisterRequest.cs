@@ -17,6 +17,9 @@ namespace XCloneAPI.DTOs
         public string Password { get; set; }
 
         [StringLength(100)]
-        public string DisplayName { get; set; }
+        public string? DisplayName { get; set; }
+
+        [StringLength(500)]
+        public string? Bio { get; set; }
     }
 }

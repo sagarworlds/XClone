@@ -32,6 +32,49 @@ namespace XCloneAPI.Services
             }
         }
 
+        public async Task<UserResponse> GetUserByUsernameAsync(string username, int currentUserId)
+        {
+            try
+            {
+                var user = await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+                if (user == null)
+                    return null;
+
+                return await MapToUserResponseAsync(user, currentUserId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching user by username: {ex.Message}");
+                throw;
+            }
+        }
+
+        public async Task<List<UserResponse>> GetSuggestionsAsync(int currentUserId, int take)
+        {
+            try
+            {
+                var users = await _context.Users
+                    .Where(u => u.Id != currentUserId
+                        && !_context.Follows.Any(f => f.FollowerId == currentUserId && f.FollowingId == u.Id))
+                    .OrderByDescending(u => u.CreatedAt)
+                    .Take(take)
+                    .ToListAsync();
+
+                var responses = new List<UserResponse>();
+                foreach (var user in users)
+                {
+                    responses.Add(await MapToUserResponseAsync(user, currentUserId));
+                }
+
+                return responses;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching suggestions: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task<List<UserResponse>> SearchUsersAsync(string query, int currentUserId, int take)
         {
             try
@@ -67,15 +110,14 @@ namespace XCloneAPI.Services
                 if (!string.IsNullOrWhiteSpace(request.DisplayName))
                     user.DisplayName = request.DisplayName;
 
-                if (!string.IsNullOrWhiteSpace(request.Bio))
+                if (request.Bio != null)
                     user.Bio = request.Bio;
 
-                if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+                if (request.AvatarUrl != null)
                     user.AvatarUrl = request.AvatarUrl;
 
                 user.UpdatedAt = DateTime.UtcNow;
 
-                _context.Users.Update(user);
                 await _context.SaveChangesAsync();
 
                 _logger.LogInformation($"User {userId} profile updated");
@@ -153,7 +195,7 @@ namespace XCloneAPI.Services
             {
                 Id = user.Id,
                 Username = user.Username,
-                Email = user.Email,
+                Email = user.Id == currentUserId ? user.Email : string.Empty,
                 DisplayName = user.DisplayName,
                 Bio = user.Bio,
                 AvatarUrl = user.AvatarUrl,

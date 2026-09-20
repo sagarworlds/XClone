@@ -83,7 +83,7 @@ namespace XCloneAPI.Services
                     {
                         Id = user.Id,
                         Username = user.Username,
-                        Email = user.Email,
+                        Email = string.Empty,
                         DisplayName = user.DisplayName,
                         Bio = user.Bio,
                         AvatarUrl = user.AvatarUrl,

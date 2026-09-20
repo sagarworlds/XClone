@@ -5,8 +5,7 @@ namespace XCloneAPI.DTOs
     public class LoginRequest
     {
         [Required]
-        [EmailAddress]
-        public string Email { get; set; }
+        public string UsernameOrEmail { get; set; }
 
         [Required]
         [StringLength(255, MinimumLength = 6)]

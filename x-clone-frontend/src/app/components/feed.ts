@@ -466,12 +466,9 @@ export class FeedComponent implements OnInit {
 
   fetchWhoToFollow(): void {
     this.loadingSuggestions.set(true);
-    this.api.searchUsers('').subscribe({
+    this.api.getSuggestions(4).subscribe({
       next: (users) => {
-        // Exclude current user from recommendations
-        const current = this.currentUser();
-        const filtered = users.filter(u => u.id !== current?.id).slice(0, 4);
-        this.suggestions.set(filtered);
+        this.suggestions.set(users);
         this.loadingSuggestions.set(false);
       },
       error: () => {
