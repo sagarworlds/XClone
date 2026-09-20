@@ -1,5 +1,6 @@
 # X (Twitter) Clone
 
+[![CI](https://github.com/sagarworlds/XClone/actions/workflows/ci.yml/badge.svg)](https://github.com/sagarworlds/XClone/actions/workflows/ci.yml)
 [![C#](https://img.shields.io/badge/C%23-%23239120?style=flat&logo=c%23&logoColor=white)](https://docs.microsoft.com/dotnet/csharp)
 [![TypeScript](https://img.shields.io/badge/TypeScript-%23007ACC?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Angular](https://img.shields.io/badge/Angular-%23DD0031?style=flat&logo=angular&logoColor=white)](https://angular.io/)
@@ -19,6 +20,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Authentication & Security**: Secure user registration and login using JWT (JSON Web Tokens).
 - **Home Timeline Feed**: A live feed of posts from the users you follow, featuring a character-limited (280 chars) tweet composer.
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
+- **Load more**: The home timeline, profile tabs and reply threads load 20 entries at a time with a "Load more" button. It stays correct while you post or delete in between (no duplicates, nothing skipped), and a failed page can be retried without losing what is already on screen.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **User Profiles**: Custom banners, avatars, display names, follower/following counts, join dates, and an interactive edit-profile modal.
@@ -41,12 +43,12 @@ XClone/
 │
 ├── XCloneAPI.Tests/          # API integration tests (xUnit, real PostgreSQL)
 │
-└── x-clone-frontend/         # Angular 19+ Single Page Application (Frontend)
+└── x-clone-frontend/         # Angular 21 Single Page Application (Frontend)
     ├── src/
     │   ├── app/
-    │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets)
+    │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets, LoadMore)
     │   │   ├── models/       # TypeScript Interfaces
-    │   │   ├── services/     # Global ApiService with Signals state management
+    │   │   ├── services/     # Global ApiService with Signals state management, PagedList (skip/take paging state)
     │   │   └── app.routes.ts # SPA routing with functional auth guards
     │   ├── environments/     # Environment-specific API configuration
     │   └── styles.css        # Global CSS dark theme styles
@@ -63,7 +65,7 @@ XClone/
 - **Authentication**: JWT Bearer Authentication
 
 ### Frontend
-- **Framework**: Angular 19+ (Standalone API & Signals)
+- **Framework**: Angular 21 (standalone components, signals, zoneless change detection)
 - **Styling**: Vanilla CSS (Custom variables, transitions, and layout grids)
 - **Icons**: Google Material Symbols Outlined
 - **Typography**: Inter Font family
@@ -74,7 +76,7 @@ XClone/
 
 ### Prerequisites
 - [.NET SDK 10.0+](https://dotnet.microsoft.com/download)
-- [Node.js v20.19.6+](https://nodejs.org/)
+- [Node.js](https://nodejs.org/) 20.19+, 22.12+ or 24+ (what Angular 21 requires)
 - [PostgreSQL](https://www.postgresql.org/download/)
 
 ---
@@ -150,6 +152,13 @@ dotnet test XCloneAPI.Tests
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
 - **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, timelines and paging, privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `master` and every pull request:
+
+- **API integration tests:** `dotnet test` in Release mode against a throwaway `postgres:17` service container (via `XCLONE_TEST_CONNECTION`). The `.trx` results are uploaded as a build artifact.
+- **Frontend build:** `npm ci`, `npm run build`, and `npm audit --omit=dev --audit-level=high`, so a broken lockfile, a build error or a new high-severity advisory in a runtime dependency fails the check.
 
 ---
 

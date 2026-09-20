@@ -2,8 +2,10 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { Location } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
+import { PagedList } from '../services/paged-list';
 import { Post } from '../models/types';
 import { ComposerComponent } from './composer';
+import { LoadMoreComponent } from './load-more';
 import { PostCardComponent } from './post-card';
 import { SidebarComponent } from './sidebar';
 import { WidgetsComponent } from './widgets';
@@ -12,7 +14,7 @@ import { WidgetsComponent } from './widgets';
 @Component({
   selector: 'app-post-detail',
   standalone: true,
-  imports: [RouterLink, SidebarComponent, WidgetsComponent, ComposerComponent, PostCardComponent],
+  imports: [RouterLink, SidebarComponent, WidgetsComponent, ComposerComponent, PostCardComponent, LoadMoreComponent],
   template: `
     <div class="app-container">
       <app-sidebar />
@@ -51,10 +53,15 @@ import { WidgetsComponent } from './widgets';
           />
 
           <div class="replies">
-            @for (reply of replies(); track reply.id) {
-              <app-post-card [post]="reply" (deleted)="onReplyDeleted($event)" />
-            } @empty {
-              <div class="state-message">No replies yet. Be the first to reply.</div>
+            @if (replies.loading()) {
+              <div class="state-message">Loading replies...</div>
+            } @else {
+              @for (reply of replies.items(); track reply.id) {
+                <app-post-card [post]="reply" (deleted)="onReplyDeleted($event)" />
+              } @empty {
+                <div class="state-message">No replies yet. Be the first to reply.</div>
+              }
+              <app-load-more [list]="replies" />
             }
           </div>
         }
@@ -116,7 +123,7 @@ export class PostDetailComponent implements OnInit {
   private readonly location = inject(Location);
 
   post = signal<Post | null>(null);
-  replies = signal<Post[]>([]);
+  readonly replies = new PagedList<Post>((skip, take) => this.api.getReplies(this.post()!.id, skip, take), (p) => String(p.id));
   loading = signal(true);
 
   readonly createReply = (content: string) => this.api.createReply(this.post()!.id, content);
@@ -136,12 +143,12 @@ export class PostDetailComponent implements OnInit {
 
   private load(id: number): void {
     this.loading.set(true);
-    this.replies.set([]);
+    this.replies.reset();
     this.api.getPost(id).subscribe({
       next: (post) => {
         this.post.set(post);
         this.loading.set(false);
-        this.api.getReplies(id, 0, 50).subscribe({ next: (replies) => this.replies.set(replies) });
+        this.replies.loadFirst();
       },
       error: () => {
         this.post.set(null);
@@ -151,12 +158,12 @@ export class PostDetailComponent implements OnInit {
   }
 
   onReplyPosted(reply: Post): void {
-    this.replies.update((curr) => [...curr, reply]);
+    this.replies.addLast(reply);
     this.post.update((p) => (p ? { ...p, repliesCount: p.repliesCount + 1 } : p));
   }
 
   onReplyDeleted(id: number): void {
-    this.replies.update((curr) => curr.filter((r) => r.id !== id));
+    this.replies.remove((r) => r.id === id);
     this.post.update((p) => (p ? { ...p, repliesCount: Math.max(0, p.repliesCount - 1) } : p));
   }
 

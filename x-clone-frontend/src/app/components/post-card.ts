@@ -4,6 +4,12 @@ import { ApiService } from '../services/api.service';
 import { Post } from '../models/types';
 
 /**
+ * Identifies an entry of a timeline. The same post can appear twice (the original and someone's repost of it),
+ * so the key includes who reposted it.
+ */
+export const postEntryKey = (post: Post): string => `${post.id}-${post.retweetedBy?.id ?? 0}`;
+
+/**
  * A single post in a timeline or thread. It owns its own like / retweet / delete
  * interactions (optimistic, reverted on error) so pages only render lists of cards.
  */

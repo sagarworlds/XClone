@@ -3,15 +3,17 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
+import { PagedList } from '../services/paged-list';
 import { Post, User } from '../models/types';
-import { PostCardComponent } from './post-card';
+import { LoadMoreComponent } from './load-more';
+import { PostCardComponent, postEntryKey } from './post-card';
 import { SidebarComponent } from './sidebar';
 import { WidgetsComponent } from './widgets';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SidebarComponent, WidgetsComponent, PostCardComponent],
+  imports: [CommonModule, FormsModule, RouterLink, SidebarComponent, WidgetsComponent, PostCardComponent, LoadMoreComponent],
   template: `
     <div class="app-container">
       <app-sidebar [active]="isOwnProfile() ? 'profile' : null" />
@@ -34,7 +36,8 @@ import { WidgetsComponent } from './widgets';
             </button>
             <div class="header-titles">
               <h2>{{ profile()?.displayName }}</h2>
-              <span class="tweet-count">{{ posts().length }} post(s)</span>
+              <!-- Only the pages loaded so far are counted, so it reads "40+" while there is more -->
+              <span class="tweet-count">{{ postList.items().length }}{{ postList.hasMore() ? '+' : '' }} post(s)</span>
             </div>
           </header>
 
@@ -92,31 +95,32 @@ import { WidgetsComponent } from './widgets';
 
           <div class="feed-posts">
             @if (activeTab() === 'posts') {
-              @if (loadingPosts()) {
+              @if (postList.loading()) {
                 <div class="loading-spinner">Loading posts...</div>
-              } @else if (posts().length === 0) {
+              } @else if (postList.items().length === 0) {
                 <div class="empty-feed">
                   <h3>No posts yet</h3>
                   <p>@{{ profile()?.username }} hasn't posted anything yet.</p>
                 </div>
               } @else {
-                <!-- The same post can appear twice (original + a repost), so the key includes the reposter -->
-                @for (post of posts(); track post.id + '-' + (post.retweetedBy?.id ?? 0)) {
-                  <app-post-card [post]="post" (deleted)="onPostDeleted($event)" />
+                @for (post of postList.items(); track entryKey(post)) {
+                  <app-post-card [post]="post" (deleted)="onPostDeleted($event)" (changed)="onPostChanged($event)" />
                 }
+                <app-load-more [list]="postList" />
               }
             } @else {
-              @if (loadingReplies()) {
+              @if (replyList.loading()) {
                 <div class="loading-spinner">Loading replies...</div>
-              } @else if (replies().length === 0) {
+              } @else if (replyList.items().length === 0) {
                 <div class="empty-feed">
                   <h3>No replies yet</h3>
                   <p>@{{ profile()?.username }} hasn't replied to anyone yet.</p>
                 </div>
               } @else {
-                @for (reply of replies(); track reply.id) {
+                @for (reply of replyList.items(); track reply.id) {
                   <app-post-card [post]="reply" (deleted)="onPostDeleted($event)" />
                 }
+                <app-load-more [list]="replyList" />
               }
             }
           </div>
@@ -431,11 +435,12 @@ export class ProfileComponent implements OnInit {
 
   // Profile State
   profile = signal<User | null>(null);
-  posts = signal<Post[]>([]);
+  readonly postList = new PagedList<Post>((skip, take) => this.api.getUserPosts(this.profile()!.id, skip, take), postEntryKey);
+  readonly replyList = new PagedList<Post>((skip, take) => this.api.getUserReplies(this.profile()!.id, skip, take), (p) => String(p.id));
+  readonly entryKey = postEntryKey;
   isOwnProfile = computed(() => this.profile()?.id === this.currentUser()?.id);
 
   loadingProfile = signal(true);
-  loadingPosts = signal(true);
 
   // Edit Modal State
   showEditModal = signal(false);
@@ -449,9 +454,6 @@ export class ProfileComponent implements OnInit {
 
   // Tabs
   activeTab = signal<'posts' | 'replies'>('posts');
-  replies = signal<Post[]>([]);
-  loadingReplies = signal(false);
-  private repliesLoaded = false;
 
   ngOnInit(): void {
     // React to username param changes
@@ -466,13 +468,13 @@ export class ProfileComponent implements OnInit {
   fetchProfile(username: string): void {
     this.loadingProfile.set(true);
     this.activeTab.set('posts');
-    this.replies.set([]);
-    this.repliesLoaded = false;
+    this.postList.reset();
+    this.replyList.reset();
     this.api.getUserProfileByUsername(username).subscribe({
       next: (user) => {
         this.profile.set(user);
         this.loadingProfile.set(false);
-        this.fetchUserPosts(user.id);
+        this.postList.loadFirst();
       },
       error: () => {
         this.profile.set(null);
@@ -481,42 +483,24 @@ export class ProfileComponent implements OnInit {
     });
   }
 
-  fetchUserPosts(userId: number): void {
-    this.loadingPosts.set(true);
-    this.api.getUserPosts(userId, 0, 40).subscribe({
-      next: (data) => {
-        this.posts.set(data);
-        this.loadingPosts.set(false);
-      },
-      error: () => {
-        this.loadingPosts.set(false);
-      }
-    });
-  }
-
   selectTab(tab: 'posts' | 'replies'): void {
     this.activeTab.set(tab);
-    const prof = this.profile();
-    if (tab === 'replies' && prof && !this.repliesLoaded) {
-      this.repliesLoaded = true;
-      this.loadingReplies.set(true);
-      this.api.getUserReplies(prof.id, 0, 40).subscribe({
-        next: (data) => {
-          this.replies.set(data);
-          this.loadingReplies.set(false);
-        },
-        error: () => {
-          this.repliesLoaded = false;
-          this.loadingReplies.set(false);
-        }
-      });
+    if (tab === 'replies' && this.profile()) {
+      this.replyList.ensureLoaded();
     }
   }
 
   onPostDeleted(id: number): void {
     // Removes the post and any repost entries of it (deleting a post also deletes its replies)
-    this.posts.update(curr => curr.filter(p => p.id !== id));
-    this.replies.update(curr => curr.filter(p => p.id !== id));
+    this.postList.remove(p => p.id === id);
+    this.replyList.remove(p => p.id === id);
+  }
+
+  onPostChanged(post: Post): void {
+    // Undoing your own repost takes its entry out of the list
+    if (post.retweetedBy?.id === this.currentUser()?.id && !post.isRetweeted) {
+      this.postList.remove(p => postEntryKey(p) === postEntryKey(post));
+    }
   }
 
   toggleFollow(): void {

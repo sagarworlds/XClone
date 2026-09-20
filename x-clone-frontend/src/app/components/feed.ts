@@ -1,15 +1,17 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { ApiService } from '../services/api.service';
+import { PagedList } from '../services/paged-list';
 import { Post } from '../models/types';
 import { ComposerComponent } from './composer';
-import { PostCardComponent } from './post-card';
+import { LoadMoreComponent } from './load-more';
+import { PostCardComponent, postEntryKey } from './post-card';
 import { SidebarComponent } from './sidebar';
 import { WidgetsComponent } from './widgets';
 
 @Component({
   selector: 'app-feed',
   standalone: true,
-  imports: [SidebarComponent, WidgetsComponent, ComposerComponent, PostCardComponent],
+  imports: [SidebarComponent, WidgetsComponent, ComposerComponent, PostCardComponent, LoadMoreComponent],
   template: `
     <div class="app-container">
       <app-sidebar active="home" />
@@ -24,18 +26,18 @@ import { WidgetsComponent } from './widgets';
 
         <!-- Posts and reposts from people you follow -->
         <div class="feed-posts">
-          @if (loadingFeed()) {
+          @if (feed.loading()) {
             <div class="loading-spinner">Loading posts...</div>
-          } @else if (posts().length === 0) {
+          } @else if (feed.items().length === 0) {
             <div class="empty-feed">
               <h3>Welcome to X!</h3>
               <p>Follow people and start sharing what's on your mind.</p>
             </div>
           } @else {
-            <!-- The same post can appear twice (original + someone's repost), so the key includes the reposter -->
-            @for (post of posts(); track post.id + '-' + (post.retweetedBy?.id ?? 0)) {
-              <app-post-card [post]="post" (deleted)="onDeleted($event)" />
+            @for (post of feed.items(); track entryKey(post)) {
+              <app-post-card [post]="post" (deleted)="onDeleted($event)" (changed)="onChanged($event)" />
             }
+            <app-load-more [list]="feed" />
           }
         </div>
       </main>
@@ -58,32 +60,28 @@ import { WidgetsComponent } from './widgets';
 export class FeedComponent implements OnInit {
   private readonly api = inject(ApiService);
 
-  posts = signal<Post[]>([]);
-  loadingFeed = signal(true);
+  readonly feed = new PagedList<Post>((skip, take) => this.api.getFeed(skip, take), postEntryKey);
+  readonly entryKey = postEntryKey;
 
   readonly createPost = (content: string) => this.api.createPost(content);
 
   ngOnInit(): void {
-    this.fetchFeed();
-  }
-
-  fetchFeed(): void {
-    this.loadingFeed.set(true);
-    this.api.getFeed(0, 40).subscribe({
-      next: (data) => {
-        this.posts.set(data);
-        this.loadingFeed.set(false);
-      },
-      error: () => this.loadingFeed.set(false),
-    });
+    this.feed.loadFirst();
   }
 
   onPosted(post: Post): void {
-    this.posts.update((curr) => [post, ...curr]);
+    this.feed.addFirst(post);
   }
 
   onDeleted(id: number): void {
     // Removes the post and any repost entries of it
-    this.posts.update((curr) => curr.filter((p) => p.id !== id));
+    this.feed.remove((p) => p.id === id);
+  }
+
+  onChanged(post: Post): void {
+    // Undoing your own repost takes its entry out of the timeline
+    if (post.retweetedBy?.id === this.api.currentUser()?.id && !post.isRetweeted) {
+      this.feed.remove((p) => postEntryKey(p) === postEntryKey(post));
+    }
   }
 }
