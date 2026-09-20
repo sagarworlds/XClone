@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting, TestRequest } from '@a
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Routes } from '@angular/router';
 import { environment } from '../environments/environment';
-import { AppNotification, Page, Post, User } from '../app/models/types';
+import { AppNotification, Page, Post, TrendingHashtag, User } from '../app/models/types';
 
 export const API = environment.apiUrl;
 
@@ -96,12 +96,15 @@ export function expectPage(path: string, cursor: string | null = null, take = 20
 }
 
 /** Answers what the shared sidebar and widgets ask for on their own, so a test can look at the page's requests. */
-export function answerBackgroundRequests(unread = 0): void {
+export function answerBackgroundRequests(unread = 0, trends: TrendingHashtag[] = []): void {
   for (const request of http().match((r) => r.url === `${API}/notifications/unread-count`)) {
     request.flush({ count: unread });
   }
   for (const request of http().match((r) => r.url === `${API}/users/suggestions`)) {
     request.flush([]);
+  }
+  for (const request of http().match((r) => r.url === `${API}/hashtags/trending`)) {
+    request.flush(trends);
   }
 }
 

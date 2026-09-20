@@ -4,6 +4,7 @@ import { ApiService } from '../services/api.service';
 import { Post } from '../models/types';
 import { formatTime } from '../utils/format-time';
 import { mediaSrc } from '../utils/media-url';
+import { PostTextComponent } from './post-text';
 
 /**
  * Identifies an entry of a timeline. The same post can appear twice (the original and someone's repost of it),
@@ -18,7 +19,7 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
 @Component({
   selector: 'app-post-card',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, PostTextComponent],
   template: `
     @let p = state();
     <article class="post-card" [class.clickable]="!focus()" [class.focus]="focus()" (click)="open($event)">
@@ -59,7 +60,7 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
             </div>
           }
 
-          <p class="post-text-content">{{ p.content }}</p>
+          <p class="post-text-content"><app-post-text [text]="p.content" /></p>
 
           @if (images().length > 0) {
             <div class="media-grid" [class]="'media-grid count-' + images().length">

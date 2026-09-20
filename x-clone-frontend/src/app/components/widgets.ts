@@ -1,14 +1,15 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
-import { User } from '../models/types';
+import { TrendingHashtag, User } from '../models/types';
 import { UserRowComponent } from './user-row';
 
 /** Right column shared by every page: user search and "Who to follow". */
 @Component({
   selector: 'app-widgets',
   standalone: true,
-  imports: [FormsModule, UserRowComponent],
+  imports: [FormsModule, RouterLink, UserRowComponent],
   // The host must not create its own box, so the <aside> stays a direct flex child of .app-container.
   styles: [`
     :host { display: contents; }
@@ -21,6 +22,29 @@ import { UserRowComponent } from './user-row';
     }
     .muted {
       color: var(--text-secondary);
+    }
+    .trend {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+    }
+    .trend:last-child {
+      margin-bottom: 0;
+    }
+    .trend:hover {
+      text-decoration: none;
+    }
+    .trend:hover .trend-tag {
+      text-decoration: underline;
+    }
+    .trend-tag {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .trend-count {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
     }
   `],
   template: `
@@ -40,6 +64,18 @@ import { UserRowComponent } from './user-row';
           <h3>Search Results</h3>
           @for (user of searchResults(); track user.id) {
             <app-user-row [user]="user" [followButton]="false" />
+          }
+        </div>
+      }
+
+      @if (trends().length > 0) {
+        <div class="widget-card">
+          <h3>Trends</h3>
+          @for (trend of trends(); track trend.tag) {
+            <a class="trend" [routerLink]="['/hashtag', trend.tag]">
+              <span class="trend-tag">#{{ trend.tag }}</span>
+              <span class="trend-count">{{ trend.postsCount }} {{ trend.postsCount === 1 ? 'post' : 'posts' }}</span>
+            </a>
           }
         </div>
       }
@@ -65,9 +101,16 @@ export class WidgetsComponent implements OnInit {
   searchQuery = '';
   searchResults = signal<User[]>([]);
   suggestions = signal<User[]>([]);
+  trends = signal<TrendingHashtag[]>([]);
   loadingSuggestions = signal(true);
 
   ngOnInit(): void {
+    // Trends are a nicety: when they cannot be fetched the card is simply not there
+    this.api.getTrendingHashtags(5).subscribe({
+      next: (trends) => this.trends.set(trends),
+      error: () => this.trends.set([]),
+    });
+
     this.api.getSuggestions(4).subscribe({
       next: (users) => {
         this.suggestions.set(users);

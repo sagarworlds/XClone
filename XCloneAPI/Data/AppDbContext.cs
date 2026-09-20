@@ -15,6 +15,7 @@ namespace XCloneAPI.Data
         public DbSet<Retweet> Retweets { get; set; }
         public DbSet<Follow> Follows { get; set; }
         public DbSet<Notification> Notifications { get; set; }
+        public DbSet<PostHashtag> PostHashtags { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -51,6 +52,19 @@ namespace XCloneAPI.Data
 
             modelBuilder.Entity<Post>()
                 .HasIndex(p => p.CreatedAt);
+
+            // Hashtag Configuration: one row per tag of a post, gone with the post; read by tag, newest post first
+            modelBuilder.Entity<PostHashtag>()
+                .HasKey(h => new { h.PostId, h.Tag });
+
+            modelBuilder.Entity<PostHashtag>()
+                .HasOne(h => h.Post)
+                .WithMany(p => p.Hashtags)
+                .HasForeignKey(h => h.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PostHashtag>()
+                .HasIndex(h => new { h.Tag, h.PostId });
 
             // Like Configuration
             modelBuilder.Entity<Like>()

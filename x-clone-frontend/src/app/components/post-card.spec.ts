@@ -123,6 +123,37 @@ describe('PostCardComponent', () => {
     });
   });
 
+  describe('hashtags', () => {
+    const hashtagLinks = () => [...el().querySelectorAll<HTMLAnchorElement>('.post-text-content a.hashtag')];
+
+    it('are links to their page', async () => {
+      await show(makePost(7, { content: 'Sunset over the #Bay, then #coffee' }));
+
+      expect(hashtagLinks().map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+        ['#Bay', '/hashtag/bay'],
+        ['#coffee', '/hashtag/coffee'],
+      ]);
+      expect(el().querySelector('.post-text-content')?.textContent).toBe('Sunset over the #Bay, then #coffee');
+    });
+
+    it('go to their page when clicked, and do not open the thread', async () => {
+      const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      await show(makePost(7, { content: 'Sunset #Bay' }));
+
+      hashtagLinks()[0].click();
+
+      expect(navigateByUrl).toHaveBeenCalledOnce();
+      expect(TestBed.inject(Router).serializeUrl(navigateByUrl.mock.calls[0][0] as never)).toBe('/hashtag/bay');
+      expect(navigate).not.toHaveBeenCalled(); // the thread was not opened
+    });
+
+    it('are also links on the main post of a thread', async () => {
+      await show(makePost(7, { content: 'Sunset #Bay' }), true);
+
+      expect(hashtagLinks()).toHaveLength(1);
+    });
+  });
+
   describe('images', () => {
     const image = (letter: string, extension = 'png') => `/uploads/${letter.repeat(32)}.${extension}`;
     const grid = () => el().querySelector<HTMLElement>('.media-grid');

@@ -222,6 +222,35 @@ describe('ApiService', () => {
       expect(answer).toEqual({ url: '/uploads/cccccccccccccccccccccccccccccccc.png' });
     });
 
+    it('reads the posts of a hashtag a page at a time, with the tag made safe for the address', () => {
+      api.getHashtagPosts('sunset').subscribe();
+      const first = http().expectOne((r) => r.url === `${API}/posts/hashtag/sunset`);
+      expect(first.request.method).toBe('GET');
+      expect(first.request.params.get('take')).toBe('20');
+      expect(first.request.params.has('cursor')).toBe(false);
+      first.flush({ items: [], nextCursor: null });
+
+      api.getHashtagPosts('日本語 と/#?', 'c1', 5).subscribe();
+      const second = http().expectOne((r) => r.url.startsWith(`${API}/posts/hashtag/`) && r.params.get('cursor') === 'c1');
+      expect(second.request.url).toBe(`${API}/posts/hashtag/${encodeURIComponent('日本語 と/#?')}`);
+      expect(second.request.url).not.toMatch(/[ #?](?!$)/);
+      expect(second.request.params.get('take')).toBe('5');
+      second.flush({ items: [], nextCursor: null });
+    });
+
+    it('asks for the trending hashtags, five by default', () => {
+      api.getTrendingHashtags().subscribe();
+      const request = http().expectOne((r) => r.url === `${API}/hashtags/trending`);
+      expect(request.request.method).toBe('GET');
+      expect(request.request.params.get('take')).toBe('5');
+      request.flush([]);
+
+      api.getTrendingHashtags(2).subscribe();
+      const other = http().expectOne((r) => r.url === `${API}/hashtags/trending`);
+      expect(other.request.params.get('take')).toBe('2');
+      other.flush([]);
+    });
+
     it('keeps the stored user in step when the profile is updated', () => {
       api.updateProfile({ displayName: 'Renamed', bio: '', avatarUrl: '' }).subscribe();
       http().expectOne(`${API}/users/profile`).flush(makeUser({ displayName: 'Renamed' }));

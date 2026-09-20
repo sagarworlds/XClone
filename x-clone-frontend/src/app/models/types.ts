@@ -33,6 +33,12 @@ export interface Post {
   retweetedBy: User | null;
 }
 
+/** A hashtag that many recent posts used: lower case, without the # */
+export interface TrendingHashtag {
+  tag: string;
+  postsCount: number;
+}
+
 /** What the API answers to an image upload: the address to attach to a post. */
 export interface MediaUpload {
   url: string;
