@@ -1,3 +1,4 @@
+using XCloneAPI.DTOs;
 using XCloneAPI.Tests.Infrastructure;
 
 namespace XCloneAPI.Tests;
@@ -41,14 +42,13 @@ public class TimelineTests(ApiFixture api)
         await reposter.ToggleRetweetAsync(posts[0]);
         await reposter.ToggleRetweetAsync(posts[2]);
 
-        var whole = (await me.FeedAsync(0, 50)).Select(e => (e.Id, e.RetweetedBy?.Id)).ToList();
+        var whole = (await me.FeedAsync(50)).Select(e => (e.Id, e.RetweetedBy?.Id)).ToList();
         Assert.Equal(6, whole.Count);   // 4 originals + 2 reposts
 
         foreach (var pageSize in new[] { 1, 2, 4 })
         {
-            var paged = new List<(int, int?)>();
-            for (var skip = 0; skip < whole.Count; skip += pageSize)
-                paged.AddRange((await me.FeedAsync(skip, pageSize)).Select(e => (e.Id, e.RetweetedBy?.Id)));
+            var pages = await me.ReadAllPagesAsync<PostResponse>("/api/posts/feed", pageSize);
+            var paged = pages.SelectMany(p => p.Items).Select(e => (e.Id, e.RetweetedBy?.Id)).ToList();
 
             Assert.Equal(whole, paged);
         }

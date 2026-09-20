@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { API, answerBackgroundRequests, expectPage, http, makePost, makeUser, provideAppTesting, range, signInAs } from '../../testing/helpers';
+import { API, answerBackgroundRequests, expectPage, http, makePost, makeUser, pageOf, provideAppTesting, range, signInAs } from '../../testing/helpers';
 import { Post } from '../models/types';
 import { PostDetailComponent } from './post-detail';
 
@@ -29,15 +29,20 @@ describe('PostDetailComponent', () => {
     await settle();
   }
 
-  async function openWithReplies(first: Post[]) {
+  /** The cursor the API hands out after a page whose last reply is this one. */
+  const after = (id: number) => `after-${id}`;
+
+  /** A full page of 20 is assumed to have more after it, as the API would say; anything shorter is everything. */
+  async function openWithReplies(first: Post[], nextCursor: string | null = first.length >= 20 ? after(first[first.length - 1].id) : null) {
     await open();
-    expectPage('/posts/7/replies', 0).flush(first);
+    expectPage('/posts/7/replies').flush(pageOf(first, nextCursor));
     await settle();
   }
 
-  async function clickLoadMore(expectedSkip: number, answer: Post[]) {
+  /** Clicks Load more and answers the request, which must carry `cursor`. */
+  async function clickLoadMore(cursor: string, answer: Post[], nextCursor: string | null = null) {
     loadMoreButton()!.click();
-    expectPage('/posts/7/replies', expectedSkip).flush(answer);
+    expectPage('/posts/7/replies', cursor).flush(pageOf(answer, nextCursor));
     await settle();
   }
 
@@ -72,7 +77,7 @@ describe('PostDetailComponent', () => {
     await open();
 
     expect(el().textContent).toContain('Loading replies...');
-    expectPage('/posts/7/replies', 0).flush([]);
+    expectPage('/posts/7/replies').flush(pageOf([]));
     await settle();
     expect(el().textContent).toContain('No replies yet');
   });
@@ -80,8 +85,8 @@ describe('PostDetailComponent', () => {
   it('appends the next pages in order and drops the button after the last', async () => {
     await openWithReplies(replies(101, 120));
 
-    await clickLoadMore(20, replies(121, 140));
-    await clickLoadMore(40, replies(141, 145));
+    await clickLoadMore(after(120), replies(121, 140), after(140));
+    await clickLoadMore(after(140), replies(141, 145));
 
     expect(replyTexts()).toEqual(replies(101, 145).map((r) => r.content));
     expect(loadMoreButton()).toBeNull();
@@ -100,12 +105,12 @@ describe('PostDetailComponent', () => {
       expect(el().querySelector('.focus .comment-btn')?.textContent).toContain('46');
     });
 
-    it('does not shift the next page, and keeps your reply at the end while the pages in between load', async () => {
+    it('keeps asking from the same place, and keeps your reply at the end while the pages in between load', async () => {
       await openWithReplies(replies(101, 120));
       component.onReplyPosted(mine());
       await settle();
 
-      await clickLoadMore(20, replies(121, 140)); // still skip 20, not 21
+      await clickLoadMore(after(120), replies(121, 140), after(140)); // your reply does not change where the next page starts
 
       expect(replyTexts()).toEqual([...replies(101, 140).map((r) => r.content), 'My reply']);
     });
@@ -114,9 +119,9 @@ describe('PostDetailComponent', () => {
       await openWithReplies(replies(101, 120));
       component.onReplyPosted(mine());
       await settle();
-      await clickLoadMore(20, replies(121, 140));
+      await clickLoadMore(after(120), replies(121, 140), after(140));
 
-      await clickLoadMore(40, [...replies(141, 145), mine()]);
+      await clickLoadMore(after(140), [...replies(141, 145), mine()]);
 
       expect(replyTexts()).toEqual([...replies(101, 145).map((r) => r.content), 'My reply']);
       expect(loadMoreButton()).toBeNull();
@@ -133,7 +138,7 @@ describe('PostDetailComponent', () => {
     expect(loadMoreButton()).toBeNull();
   });
 
-  it('removes a reply you delete, lowers the count, and asks for the next page one entry earlier', async () => {
+  it('removes a reply you delete, lowers the count, and the next page still starts where it did', async () => {
     await openWithReplies([makePost(101, { user: me, userId: me.id, parentPostId: 7, content: 'Reply #101' }), ...replies(102, 120)]);
 
     replyCards()[0].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
@@ -142,7 +147,7 @@ describe('PostDetailComponent', () => {
 
     expect(replyCards()).toHaveLength(19);
     expect(el().querySelector('.focus .comment-btn')?.textContent).toContain('44');
-    await clickLoadMore(19, replies(121, 130));
+    await clickLoadMore(after(120), replies(121, 130));
     expect(replyCards()).toHaveLength(29);
   });
 
@@ -161,7 +166,7 @@ describe('PostDetailComponent', () => {
 
   it('links to the parent when the post is itself a reply', async () => {
     await open(8, makePost(8, { parentPostId: 3, content: 'A reply' }));
-    expectPage('/posts/8/replies', 0).flush([]);
+    expectPage('/posts/8/replies').flush(pageOf([]));
     await settle();
 
     expect(el().querySelector('.parent-link')?.getAttribute('href')).toBe('/post/3');
@@ -169,7 +174,7 @@ describe('PostDetailComponent', () => {
 
   it('forgets the previous post\'s replies when you go to another post, even if they were still loading', async () => {
     await open();
-    const pending = expectPage('/posts/7/replies', 0);
+    const pending = expectPage('/posts/7/replies');
 
     const navigation = harness.navigateByUrl('/post/8', PostDetailComponent);
     await settle();
@@ -179,7 +184,7 @@ describe('PostDetailComponent', () => {
     await navigation;
     await settle();
 
-    expectPage('/posts/8/replies', 0).flush(replies(1, 2).map((r) => ({ ...r, parentPostId: 8 })));
+    expectPage('/posts/8/replies').flush(pageOf(replies(1, 2).map((r) => ({ ...r, parentPostId: 8 }))));
     await settle();
     expect(el().textContent).toContain('Another post');
     expect(replyCards()).toHaveLength(2);

@@ -74,7 +74,7 @@ public class PostsCountTests(ApiFixture api)
         await alice.ToggleRetweetAsync(post.Id);
 
         Assert.Equal(2, await CountAsync(alice));
-        Assert.Equal(2, (await alice.GetAsync<List<PostResponse>>($"/api/posts/user/{alice.Id}")).Count);
+        Assert.Equal(2, (await alice.GetItemsAsync<PostResponse>($"/api/posts/user/{alice.Id}")).Count);
     }
 
     [Fact]
@@ -136,7 +136,7 @@ public class PostsCountTests(ApiFixture api)
         await alice.ToggleRetweetAsync(bobsPost.Id);
         await bob.ToggleRetweetAsync(bobsReply.Id);   // bob reposts alice's reply: not alice's entry
 
-        var listed = await api.Anonymous.GetFromJsonAsync<List<PostResponse>>($"/api/posts/user/{alice.Id}?take=50", TestUser.Json);
+        var listed = await api.Anonymous.GetItemsAsync<PostResponse>($"/api/posts/user/{alice.Id}?take=50");
 
         Assert.Equal(listed!.Count, await CountAsync(alice));
         Assert.Equal(5, listed.Count);

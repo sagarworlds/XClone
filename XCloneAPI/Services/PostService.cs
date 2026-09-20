@@ -131,7 +131,7 @@ namespace XCloneAPI.Services
         }
 
         // Home timeline: top-level posts and retweets from people the user follows, plus their own.
-        public async Task<List<PostResponse>> GetFeedAsync(int userId, int skip, int take)
+        public async Task<PagedResponse<PostResponse>> GetFeedAsync(int userId, TimelineCursor? after, int take)
         {
             try
             {
@@ -140,7 +140,7 @@ namespace XCloneAPI.Services
                     .Select(f => f.FollowingId)
                     .Concat(_context.Users.Where(u => u.Id == userId).Select(u => u.Id));
 
-                return await GetTimelineAsync(authorIds, userId, skip, take);
+                return await GetTimelineAsync(authorIds, userId, after, take);
             }
             catch (Exception ex)
             {
@@ -150,12 +150,12 @@ namespace XCloneAPI.Services
         }
 
         // Profile "Posts" tab: a user's top-level posts and their retweets.
-        public async Task<List<PostResponse>> GetUserPostsAsync(int userId, int currentUserId, int skip, int take)
+        public async Task<PagedResponse<PostResponse>> GetUserPostsAsync(int userId, int currentUserId, TimelineCursor? after, int take)
         {
             try
             {
                 var authorIds = _context.Users.Where(u => u.Id == userId).Select(u => u.Id);
-                return await GetTimelineAsync(authorIds, currentUserId, skip, take);
+                return await GetTimelineAsync(authorIds, currentUserId, after, take);
             }
             catch (Exception ex)
             {
@@ -164,19 +164,23 @@ namespace XCloneAPI.Services
             }
         }
 
-        // Profile "Replies" tab: replies written by the user, newest first.
-        public async Task<List<PostResponse>> GetUserRepliesAsync(int userId, int currentUserId, int skip, int take)
+        // Profile "Replies" tab: replies written by the user, newest first (ids only ever grow, so id order is time order).
+        public async Task<PagedResponse<PostResponse>> GetUserRepliesAsync(int userId, int currentUserId, int? beforeId, int take)
         {
             try
             {
-                var entries = await _context.Posts
-                    .Where(p => p.UserId == userId && p.ParentPostId != null)
-                    .OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.Id)
-                    .Skip(skip).Take(take)
+                var query = _context.Posts.Where(p => p.UserId == userId && p.ParentPostId != null);
+                if (beforeId != null)
+                    query = query.Where(p => p.Id < beforeId);
+
+                // One more than asked for tells whether there is a next page
+                var entries = await query
+                    .OrderByDescending(p => p.Id)
+                    .Take(take + 1)
                     .Select(p => new TimelineEntry { PostId = p.Id, At = p.CreatedAt })
                     .ToListAsync();
 
-                return await BuildResponsesAsync(entries, currentUserId);
+                return await BuildPageAsync(entries, take, currentUserId, e => IdCursor.Encode(e.PostId));
             }
             catch (Exception ex)
             {
@@ -186,18 +190,21 @@ namespace XCloneAPI.Services
         }
 
         // Conversation view: direct replies to a post, oldest first.
-        public async Task<List<PostResponse>> GetRepliesAsync(int postId, int currentUserId, int skip, int take)
+        public async Task<PagedResponse<PostResponse>> GetRepliesAsync(int postId, int currentUserId, int? afterId, int take)
         {
             try
             {
-                var entries = await _context.Posts
-                    .Where(p => p.ParentPostId == postId)
-                    .OrderBy(p => p.CreatedAt).ThenBy(p => p.Id)
-                    .Skip(skip).Take(take)
+                var query = _context.Posts.Where(p => p.ParentPostId == postId);
+                if (afterId != null)
+                    query = query.Where(p => p.Id > afterId);
+
+                var entries = await query
+                    .OrderBy(p => p.Id)
+                    .Take(take + 1)
                     .Select(p => new TimelineEntry { PostId = p.Id, At = p.CreatedAt })
                     .ToListAsync();
 
-                return await BuildResponsesAsync(entries, currentUserId);
+                return await BuildPageAsync(entries, take, currentUserId, e => IdCursor.Encode(e.PostId));
             }
             catch (Exception ex)
             {
@@ -235,8 +242,10 @@ namespace XCloneAPI.Services
             }
         }
 
-        // Pages one merged stream of original posts and retweets (newest first) for the given authors.
-        private async Task<List<PostResponse>> GetTimelineAsync(IQueryable<int> authorIds, int currentUserId, int skip, int take)
+        // Pages one merged stream of original posts and retweets (newest first) for the given authors. An entry is
+        // identified by (moment, post, who reposted it - 0 for the original), and a page starts right after the entry
+        // the cursor names.
+        private async Task<PagedResponse<PostResponse>> GetTimelineAsync(IQueryable<int> authorIds, int currentUserId, TimelineCursor? after, int take)
         {
             var originals = _context.Posts
                 .Where(p => p.ParentPostId == null && authorIds.Contains(p.UserId))
@@ -246,12 +255,38 @@ namespace XCloneAPI.Services
                 .Where(r => authorIds.Contains(r.UserId))
                 .Select(r => new TimelineEntry { PostId = r.PostId, At = r.CreatedAt, RetweeterId = r.UserId });
 
-            var entries = await originals.Concat(retweets)
-                .OrderByDescending(e => e.At).ThenByDescending(e => e.PostId)
-                .Skip(skip).Take(take)
+            var stream = originals.Concat(retweets);
+            if (after != null)
+            {
+                var at = after.At;
+                var postId = after.PostId;
+                var retweeterId = after.RetweeterId;
+                stream = stream.Where(e => e.At < at
+                    || (e.At == at && (e.PostId < postId
+                        || (e.PostId == postId && (e.RetweeterId ?? 0) < retweeterId))));
+            }
+
+            var entries = await stream
+                .OrderByDescending(e => e.At).ThenByDescending(e => e.PostId).ThenByDescending(e => e.RetweeterId ?? 0)
+                .Take(take + 1)
                 .ToListAsync();
 
-            return await BuildResponsesAsync(entries, currentUserId);
+            return await BuildPageAsync(entries, take, currentUserId,
+                e => new TimelineCursor(e.At, e.PostId, e.RetweeterId ?? 0).Encode());
+        }
+
+        // Turns the rows of a query that asked for one more than the page size into a page: the extra row is not
+        // shown, it only proves there is more, and the cursor points at the last row that is.
+        private async Task<PagedResponse<PostResponse>> BuildPageAsync(List<TimelineEntry> rows, int take, int currentUserId, Func<TimelineEntry, string> cursorOf)
+        {
+            var hasMore = rows.Count > take;
+            var page = hasMore ? rows.Take(take).ToList() : rows;
+
+            return new PagedResponse<PostResponse>
+            {
+                Items = await BuildResponsesAsync(page, currentUserId),
+                NextCursor = hasMore ? cursorOf(page[^1]) : null
+            };
         }
 
         // Loads everything for a page of entries in a fixed number of queries (no per-post round trips).

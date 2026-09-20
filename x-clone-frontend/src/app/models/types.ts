@@ -53,3 +53,10 @@ export interface AppNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+// One page of a list that is read with cursors: pass nextCursor back to get the page after this one
+export interface Page<T> {
+  items: T[];
+  // null when this was the last page
+  nextCursor: string | null;
+}

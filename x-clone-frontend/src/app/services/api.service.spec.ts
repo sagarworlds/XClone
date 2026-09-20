@@ -115,31 +115,43 @@ describe('ApiService', () => {
       api = TestBed.inject(ApiService);
     });
 
-    const pagedCalls: [string, () => Observable<unknown>, string][] = [
-      ['getFeed', () => api.getFeed(40, 20), '/posts/feed'],
-      ['getUserPosts', () => api.getUserPosts(9, 40, 20), '/posts/user/9'],
-      ['getReplies', () => api.getReplies(9, 40, 20), '/posts/9/replies'],
-      ['getUserReplies', () => api.getUserReplies(9, 40, 20), '/posts/user/9/replies'],
-      ['getNotifications', () => api.getNotifications(40, 20), '/notifications'],
+    const pagedCalls: [string, (cursor: string | null) => Observable<unknown>, string][] = [
+      ['getFeed', (cursor) => api.getFeed(cursor, 30), '/posts/feed'],
+      ['getUserPosts', (cursor) => api.getUserPosts(9, cursor, 30), '/posts/user/9'],
+      ['getReplies', (cursor) => api.getReplies(9, cursor, 30), '/posts/9/replies'],
+      ['getUserReplies', (cursor) => api.getUserReplies(9, cursor, 30), '/posts/user/9/replies'],
+      ['getNotifications', (cursor) => api.getNotifications(cursor, 30), '/notifications'],
     ];
 
-    it.each(pagedCalls)('%s pages with skip and take', (_name, call, path) => {
-      call().subscribe();
+    it.each(pagedCalls)('%s sends the cursor and the page size', (_name, call, path) => {
+      call('abc-123_x').subscribe();
 
       const request = http().expectOne((r) => r.url === `${API}${path}`);
       expect(request.request.method).toBe('GET');
-      expect(request.request.params.get('skip')).toBe('40');
-      expect(request.request.params.get('take')).toBe('20');
-      request.flush([]);
+      expect(request.request.params.get('cursor')).toBe('abc-123_x');
+      expect(request.request.params.get('take')).toBe('30');
+      expect(request.request.params.has('skip')).toBe(false);
+      request.flush({ items: [], nextCursor: null });
     });
 
-    it('asks for the first 20 notifications by default', () => {
-      api.getNotifications().subscribe();
+    it.each(pagedCalls)('%s sends no cursor at all for the first page', (_name, call, path) => {
+      call(null).subscribe();
+
+      const request = http().expectOne((r) => r.url === `${API}${path}`);
+      expect(request.request.params.has('cursor')).toBe(false);
+      expect(request.request.params.get('take')).toBe('30');
+      request.flush({ items: [], nextCursor: null });
+    });
+
+    it('asks for the first 20 of a list by default, and hands the answer back as a page', () => {
+      const received = vi.fn();
+      api.getNotifications().subscribe(received);
 
       const request = http().expectOne((r) => r.url === `${API}/notifications`);
-      expect(request.request.params.get('skip')).toBe('0');
+      expect(request.request.params.has('cursor')).toBe(false);
       expect(request.request.params.get('take')).toBe('20');
-      request.flush([makeNotification(1)]);
+      request.flush({ items: [makeNotification(1)], nextCursor: 'next' });
+      expect(received).toHaveBeenCalledWith({ items: [makeNotification(1)], nextCursor: 'next' });
     });
 
     it('reads the unread count and marks everything read', () => {

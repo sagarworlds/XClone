@@ -118,11 +118,11 @@ export class NotificationsComponent implements OnInit {
   readonly formatTime = formatTime;
 
   readonly list = new PagedList<AppNotification>(
-    (skip, take) =>
-      this.api.getNotifications(skip, take).pipe(
+    (cursor, take) =>
+      this.api.getNotifications(cursor, take).pipe(
         // The page keeps showing which ones were new; the server and the badge learn they have been seen
         tap((page) => {
-          if (skip === 0 && page.some((n) => !n.isRead)) this.notifications.markAllRead();
+          if (cursor === null && page.items.some((n) => !n.isRead)) this.notifications.markAllRead();
         }),
       ),
     (n) => String(n.id),

@@ -92,7 +92,7 @@ public class RetweetsTests(ApiFixture api)
         Assert.Equal(me.Id, inFeed.RetweetedBy!.Id);
         Assert.True(inFeed.IsRetweeted);
 
-        var profile = await api.Anonymous.GetFromJsonAsync<List<PostResponse>>($"/api/posts/user/{me.Id}", TestUser.Json);
+        var profile = await api.Anonymous.GetItemsAsync<PostResponse>($"/api/posts/user/{me.Id}");
         var onProfile = Assert.Single(profile!);
         Assert.Equal(post.Id, onProfile.Id);
         Assert.Equal(me.Id, onProfile.RetweetedBy!.Id);
@@ -157,6 +157,6 @@ public class RetweetsTests(ApiFixture api)
         await (await author.DeleteAsync($"/api/posts/{post.Id}")).ShouldBeAsync(HttpStatusCode.NoContent);
 
         Assert.Empty(await follower.FeedAsync());
-        Assert.Empty(await api.Anonymous.GetFromJsonAsync<List<PostResponse>>($"/api/posts/user/{reposter.Id}", TestUser.Json) ?? []);
+        Assert.Empty(await api.Anonymous.GetItemsAsync<PostResponse>($"/api/posts/user/{reposter.Id}") ?? []);
     }
 }

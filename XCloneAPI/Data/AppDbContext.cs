@@ -42,11 +42,12 @@ namespace XCloneAPI.Data
                 .HasForeignKey(p => p.ParentPostId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Replies are read per parent and per author in id order (cursor paging)
             modelBuilder.Entity<Post>()
-                .HasIndex(p => p.ParentPostId);
+                .HasIndex(p => new { p.ParentPostId, p.Id });
 
             modelBuilder.Entity<Post>()
-                .HasIndex(p => p.UserId);
+                .HasIndex(p => new { p.UserId, p.Id });
 
             modelBuilder.Entity<Post>()
                 .HasIndex(p => p.CreatedAt);
@@ -141,7 +142,7 @@ namespace XCloneAPI.Data
                 .HasIndex(n => new { n.RecipientId, n.IsRead });
 
             modelBuilder.Entity<Notification>()
-                .HasIndex(n => new { n.RecipientId, n.CreatedAt });
+                .HasIndex(n => new { n.RecipientId, n.Id });
 
             modelBuilder.Entity<Notification>()
                 .HasIndex(n => n.PostId);

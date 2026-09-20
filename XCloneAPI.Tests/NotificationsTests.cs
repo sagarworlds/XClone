@@ -287,16 +287,15 @@ public class NotificationsTests(ApiFixture api)
         for (var i = 1; i <= 7; i++)
             await bob.ReplyAsync(post.Id, $"reply {i}");
 
-        var pages = new List<string>();
-        for (var skip = 0; skip < 7; skip += 3)
-            pages.AddRange((await alice.NotificationsAsync(skip, 3)).Select(n => n.PostContent));
+        var pages = await alice.ReadAllPagesAsync<NotificationResponse>("/api/notifications", take: 3);
 
-        Assert.Equal(Enumerable.Range(1, 7).Reverse().Select(i => $"reply {i}"), pages);
-        Assert.Empty(await alice.NotificationsAsync(skip: 7, take: 3));
+        Assert.Equal(new[] { 3, 3, 1 }, pages.Select(p => p.Items.Count));
+        Assert.Equal(Enumerable.Range(1, 7).Reverse().Select(i => $"reply {i}"), pages.SelectMany(p => p.Items).Select(n => n.PostContent));
+        Assert.Null(pages[^1].NextCursor);
     }
 
     [Fact]
-    public async Task PageSize_IsClamped_AndNegativeSkipIsTreatedAsZero()
+    public async Task PageSize_IsClamped()
     {
         var alice = await api.RegisterAsync("alice");
         var bob = await api.RegisterAsync("bob");
@@ -304,12 +303,12 @@ public class NotificationsTests(ApiFixture api)
         for (var i = 0; i < 55; i++)
             await bob.ReplyAsync(post.Id, $"r{i}");
 
-        Assert.Equal(50, (await alice.NotificationsAsync(skip: 0, take: 1000)).Count);
-        Assert.Single(await alice.NotificationsAsync(skip: 0, take: 0));
-        Assert.Single(await alice.NotificationsAsync(skip: 0, take: -5));
-        Assert.Equal(50, (await alice.NotificationsAsync(skip: -10, take: 50)).Count);
-        Assert.Equal(5, (await alice.NotificationsAsync(skip: 50, take: 50)).Count);
-        Assert.Equal(20, (await alice.GetAsync<List<NotificationResponse>>("/api/notifications")).Count);   // the default page
+        var biggest = await alice.NotificationsPageAsync(take: 1000);
+        Assert.Equal(50, biggest.Items.Count);
+        Assert.Single(await alice.NotificationsAsync(take: 0));
+        Assert.Single(await alice.NotificationsAsync(take: -5));
+        Assert.Equal(5, (await alice.NotificationsPageAsync(biggest.NextCursor, 50)).Items.Count);
+        Assert.Equal(20, (await alice.GetItemsAsync<NotificationResponse>("/api/notifications")).Count);   // the default page
     }
 
     // ---- access ---------------------------------------------------------------------------------------------
