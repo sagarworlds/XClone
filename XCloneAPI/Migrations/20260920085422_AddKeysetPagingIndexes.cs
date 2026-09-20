@@ -10,17 +10,11 @@ namespace XCloneAPI.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_posts_parent_post_id",
-                table: "posts");
-
-            migrationBuilder.DropIndex(
-                name: "IX_posts_user_id",
-                table: "posts");
-
-            migrationBuilder.DropIndex(
-                name: "IX_notifications_recipient_id_created_at",
-                table: "notifications");
+            // The old single-column indexes may be missing from a database that was not built by these migrations
+            // (a plain DropIndex would fail there), and the new indexes make them redundant anyway.
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_posts_parent_post_id\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_posts_user_id\";");
+            migrationBuilder.Sql("DROP INDEX IF EXISTS \"IX_notifications_recipient_id_created_at\";");
 
             migrationBuilder.CreateIndex(
                 name: "IX_posts_parent_post_id_id",
