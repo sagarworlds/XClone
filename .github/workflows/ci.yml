@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# The workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# A newer push to the same branch/PR cancels the run that is still going.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-tests:
+    name: API integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres   # throwaway credential for the CI-only database container
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The tests create and drop their own database (xclone_it_*) on this server.
+      XCLONE_TEST_CONNECTION: Host=localhost;Port=5432;Username=postgres;Password=postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test
+        run: dotnet test XCloneAPI.Tests --configuration Release --logger "trx;LogFileName=results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-results
+          path: "**/results.trx"
+          if-no-files-found: ignore
+
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: x-clone-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: x-clone-frontend/package-lock.json
+
+      - name: Install dependencies (from the lockfile)
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
