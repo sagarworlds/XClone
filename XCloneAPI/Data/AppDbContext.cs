@@ -12,6 +12,7 @@ namespace XCloneAPI.Data
         public DbSet<User> Users { get; set; }
         public DbSet<Post> Posts { get; set; }
         public DbSet<Like> Likes { get; set; }
+        public DbSet<Retweet> Retweets { get; set; }
         public DbSet<Follow> Follows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -33,6 +34,15 @@ namespace XCloneAPI.Data
                 .WithMany(u => u.Posts)
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Post>()
+                .HasOne(p => p.ParentPost)
+                .WithMany(p => p.Replies)
+                .HasForeignKey(p => p.ParentPostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Post>()
+                .HasIndex(p => p.ParentPostId);
 
             modelBuilder.Entity<Post>()
                 .HasIndex(p => p.UserId);
@@ -59,6 +69,26 @@ namespace XCloneAPI.Data
 
             modelBuilder.Entity<Like>()
                 .HasIndex(l => l.PostId);
+
+            // Retweet Configuration
+            modelBuilder.Entity<Retweet>()
+                .HasOne(r => r.User)
+                .WithMany(u => u.Retweets)
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Retweet>()
+                .HasOne(r => r.Post)
+                .WithMany(p => p.Retweets)
+                .HasForeignKey(r => r.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Retweet>()
+                .HasIndex(r => new { r.UserId, r.PostId })
+                .IsUnique();
+
+            modelBuilder.Entity<Retweet>()
+                .HasIndex(r => r.PostId);
 
             // Follow Configuration
             modelBuilder.Entity<Follow>()

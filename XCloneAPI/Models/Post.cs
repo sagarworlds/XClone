@@ -31,6 +31,10 @@ namespace XCloneAPI.Models
         [Column("replies_count")]
         public int RepliesCount { get; set; } = 0;
 
+        // Set when this post is a reply; null for top-level posts
+        [Column("parent_post_id")]
+        public int? ParentPostId { get; set; }
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -41,6 +45,10 @@ namespace XCloneAPI.Models
         [ForeignKey("UserId")]
         public User User { get; set; }
 
+        public Post? ParentPost { get; set; }
+
+        public ICollection<Post> Replies { get; set; } = new List<Post>();
         public ICollection<Like> Likes { get; set; } = new List<Like>();
+        public ICollection<Retweet> Retweets { get; set; } = new List<Retweet>();
     }
 }

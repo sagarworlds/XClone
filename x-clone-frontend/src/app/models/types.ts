@@ -23,6 +23,12 @@ export interface Post {
   updatedAt: string;
   user: User;
   isLiked: boolean;
+  // Set when the post is a reply
+  parentPostId: number | null;
+  replyToUsername: string | null;
+  // Retweet state: whether the current user retweeted it, and who retweeted it into this timeline entry
+  isRetweeted: boolean;
+  retweetedBy: User | null;
 }
 
 export interface AuthResponse {

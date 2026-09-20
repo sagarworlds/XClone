@@ -102,6 +102,66 @@ namespace XCloneAPI.Controllers
             }
         }
 
+        [HttpPost("{id:int}/replies")]
+        public async Task<ActionResult<PostResponse>> CreateReply(int id, [FromBody] PostRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var reply = await _postService.CreateReplyAsync(userId, id, request);
+                if (reply == null)
+                    return NotFound(new { message = "Post not found" });
+                return CreatedAtAction(nameof(GetPost), new { id = reply.Id }, reply);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error creating reply: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
+        [HttpGet("{id:int}/replies")]
+        [AllowAnonymous]
+        public async Task<ActionResult<List<PostResponse>>> GetReplies(int id, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        {
+            try
+            {
+                skip = Math.Max(skip, 0);
+                take = Math.Clamp(take, 1, MaxPageSize);
+                var currentUserId = GetCurrentUserId();
+                var replies = await _postService.GetRepliesAsync(id, currentUserId, skip, take);
+                return Ok(replies);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching replies: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
+        [HttpGet("user/{userId:int}/replies")]
+        [AllowAnonymous]
+        public async Task<ActionResult<List<PostResponse>>> GetUserReplies(int userId, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        {
+            try
+            {
+                skip = Math.Max(skip, 0);
+                take = Math.Clamp(take, 1, MaxPageSize);
+                var currentUserId = GetCurrentUserId();
+                var replies = await _postService.GetUserRepliesAsync(userId, currentUserId, skip, take);
+                return Ok(replies);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error fetching user replies: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(int id)
         {

@@ -19,6 +19,8 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Authentication & Security**: Secure user registration and login using JWT (JSON Web Tokens).
 - **Home Timeline Feed**: A live feed of posts from the users you follow, featuring a character-limited (280 chars) tweet composer.
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
+- **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
+- **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **User Profiles**: Custom banners, avatars, display names, follower/following counts, join dates, and an interactive edit-profile modal.
 - **Social Graph**: Follow and unfollow capabilities that seamlessly update timelines and recommendation widgets.
 - **User Search & Recommendations**: Dynamic real-time user search and a "Who to follow" suggestion widget.

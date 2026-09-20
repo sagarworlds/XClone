@@ -86,6 +86,24 @@ export class ApiService {
     return this.http.get<Post[]>(`${this.baseUrl}/posts/user/${userId}`, { params });
   }
 
+  getPost(id: number): Observable<Post> {
+    return this.http.get<Post>(`${this.baseUrl}/posts/${id}`);
+  }
+
+  getReplies(postId: number, skip = 0, take = 40): Observable<Post[]> {
+    const params = new HttpParams().set('skip', skip).set('take', take);
+    return this.http.get<Post[]>(`${this.baseUrl}/posts/${postId}/replies`, { params });
+  }
+
+  getUserReplies(userId: number, skip = 0, take = 40): Observable<Post[]> {
+    const params = new HttpParams().set('skip', skip).set('take', take);
+    return this.http.get<Post[]>(`${this.baseUrl}/posts/user/${userId}/replies`, { params });
+  }
+
+  createReply(postId: number, content: string): Observable<Post> {
+    return this.http.post<Post>(`${this.baseUrl}/posts/${postId}/replies`, { content });
+  }
+
   createPost(content: string, mediaUrls: string[] = []): Observable<Post> {
     return this.http.post<Post>(`${this.baseUrl}/posts`, { content, mediaUrls });
   }
@@ -105,6 +123,11 @@ export class ApiService {
 
   private toggleLike(postId: number): Observable<{ liked: boolean }> {
     return this.http.post<{ liked: boolean }>(`${this.baseUrl}/likes/toggle/${postId}`, {});
+  }
+
+  // Retweets Methods (single toggle endpoint)
+  toggleRetweet(postId: number): Observable<{ retweeted: boolean }> {
+    return this.http.post<{ retweeted: boolean }>(`${this.baseUrl}/retweets/toggle/${postId}`, {});
   }
 
   // Follows Methods (the API exposes a single toggle endpoint)

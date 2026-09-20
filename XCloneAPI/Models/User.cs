@@ -51,6 +51,7 @@ namespace XCloneAPI.Models
         // Navigation Properties
         public ICollection<Post> Posts { get; set; } = new List<Post>();
         public ICollection<Like> Likes { get; set; } = new List<Like>();
+        public ICollection<Retweet> Retweets { get; set; } = new List<Retweet>();
         public ICollection<Follow> FollowingList { get; set; } = new List<Follow>();
         public ICollection<Follow> FollowerList { get; set; } = new List<Follow>();
     }

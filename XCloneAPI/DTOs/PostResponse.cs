@@ -13,5 +13,13 @@
         public DateTime UpdatedAt { get; set; }
         public UserResponse User { get; set; }
         public bool IsLiked { get; set; }
+
+        // Reply info: set when this post is a reply
+        public int? ParentPostId { get; set; }
+        public string? ReplyToUsername { get; set; }
+
+        // Retweet info: whether the current user retweeted it, and (in timelines) who retweeted it into this entry
+        public bool IsRetweeted { get; set; }
+        public UserResponse? RetweetedBy { get; set; }
     }
 }
