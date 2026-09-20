@@ -56,6 +56,10 @@ namespace XCloneAPI.Controllers
                 var likes = await _likeService.GetPostLikesAsync(postId, skip, take);
                 return Ok(likes);
             }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 _logger.LogError($"Error fetching likes: {ex.Message}");

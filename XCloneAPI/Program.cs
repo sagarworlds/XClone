@@ -73,6 +73,7 @@ builder.Services.AddCors(options =>
 });
 
 // 5. Rate limiting (brute-force protection for login/register)
+var authPermitLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -84,7 +85,7 @@ builder.Services.AddRateLimiter(options =>
     };
     options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
         httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = authPermitLimit, Window = TimeSpan.FromMinutes(1) }));
 });
 
 // 5b. Add Controllers
@@ -145,3 +146,6 @@ app.MapFallback(() => Results.NotFound(new { message = "Endpoint not found" }));
 
 // 7. Run the application
 app.Run();
+
+// Makes the entry point visible to the integration test project (WebApplicationFactory<Program>)
+public partial class Program { }

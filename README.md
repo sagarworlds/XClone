@@ -33,16 +33,18 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 ```
 XClone/
 ├── XCloneAPI/                # ASP.NET Core 10.0 Web API (Backend)
-│   ├── Controllers/          # API endpoints (Auth, Posts, Likes, Follows, Users)
+│   ├── Controllers/          # API endpoints (Auth, Posts, Likes, Retweets, Follows, Users)
 │   ├── Data/                 # AppDbContext configuration
 │   ├── DTOs/                 # Request/Response Data Transfer Objects
-│   ├── Models/               # Entity Framework database schemas (User, Post, Like, Follow)
+│   ├── Models/               # Entity Framework database schemas (User, Post, Like, Retweet, Follow)
 │   └── Services/             # Domain logic (IAuthService, IPostService, etc.)
+│
+├── XCloneAPI.Tests/          # API integration tests (xUnit, real PostgreSQL)
 │
 └── x-clone-frontend/         # Angular 19+ Single Page Application (Frontend)
     ├── src/
     │   ├── app/
-    │   │   ├── components/   # Standalone UI Views (Login, Register, Feed, Profile)
+    │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets)
     │   │   ├── models/       # TypeScript Interfaces
     │   │   ├── services/     # Global ApiService with Signals state management
     │   │   └── app.routes.ts # SPA routing with functional auth guards
@@ -133,6 +135,21 @@ dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
    npm run start
    ```
    *The application will launch automatically on `http://localhost:4200`.*
+
+---
+
+## 🧪 Tests
+
+`XCloneAPI.Tests` holds the API integration tests. They start the real API in-process and talk to a real PostgreSQL database (not a fake), so Postgres-specific behavior is exercised for real.
+
+```bash
+dotnet test XCloneAPI.Tests
+```
+
+- **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
+- **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, timelines and paging, privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ---
 
