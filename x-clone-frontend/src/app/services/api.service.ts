@@ -146,12 +146,12 @@ export class ApiService {
     return this.http.post<{ followed: boolean }>(`${this.baseUrl}/follows/toggle/${userId}`, {});
   }
 
-  getFollowers(userId: number): Observable<User[]> {
-    return this.http.get<User[]>(`${this.baseUrl}/users/${userId}/followers`);
+  getFollowers(userId: number, cursor: string | null = null, take = 20): Observable<Page<User>> {
+    return this.http.get<Page<User>>(`${this.baseUrl}/users/${userId}/followers`, { params: this.pageParams(cursor, take) });
   }
 
-  getFollowing(userId: number): Observable<User[]> {
-    return this.http.get<User[]>(`${this.baseUrl}/users/${userId}/following`);
+  getFollowing(userId: number, cursor: string | null = null, take = 20): Observable<Page<User>> {
+    return this.http.get<Page<User>>(`${this.baseUrl}/users/${userId}/following`, { params: this.pageParams(cursor, take) });
   }
 
   // Users Methods

@@ -325,6 +325,26 @@ describe('ProfileComponent', () => {
     });
   });
 
+  describe('follower and following counts', () => {
+    const popular = makeUser({ id: 5, username: 'alice', displayName: 'Alice', email: '', followersCount: 12, followingCount: 3 });
+    const countLinks = () => [...el().querySelectorAll<HTMLAnchorElement>('a.follow-item')];
+
+    it('link to the lists of followers and of who they follow', async () => {
+      await openWithPosts([], popular);
+
+      expect(countLinks().map((a) => [a.textContent?.replace(/\s+/g, ' ').trim(), a.getAttribute('href')])).toEqual([
+        ['3 Following', '/profile/alice/following'],
+        ['12 Followers', '/profile/alice/followers'],
+      ]);
+    });
+
+    it('show zero when the user has nobody yet, and still link', async () => {
+      await openWithPosts([], makeUser({ id: 5, username: 'alice', displayName: 'Alice', email: '', followersCount: 0, followingCount: 0 }));
+
+      expect(countLinks().map((a) => a.textContent?.replace(/\s+/g, ' ').trim())).toEqual(['0 Following', '0 Followers']);
+    });
+  });
+
   it('says when the user does not exist', async () => {
     const navigation = harness.navigateByUrl('/profile/ghost', ProfileComponent);
     await settle();

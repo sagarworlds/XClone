@@ -25,7 +25,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **Notifications**: You are told when someone replies to or reposts one of your posts (never for your own actions). The sidebar shows an unread badge that refreshes every 30 seconds, and the Notifications page lists everything newest first, highlights what is new, and marks it all as read when you open it. Undoing a repost, or deleting the reply or the post, takes its notification back.
 - **User Profiles**: Custom banners, avatars, display names, follower/following counts, an exact post count (top-level posts and reposts, matching the Posts tab; replies are not counted), join dates, and an interactive edit-profile modal.
-- **Social Graph**: Follow and unfollow capabilities that seamlessly update timelines and recommendation widgets.
+- **Social Graph**: Follow and unfollow capabilities that seamlessly update timelines and recommendation widgets. The follower and following counts on a profile open the full lists (newest follow first, 20 at a time with "Load more"), each with its own follow button.
 - **User Search & Recommendations**: Dynamic real-time user search and a "Who to follow" suggestion widget.
 - **Responsive Theme**: Premium, Twitter-inspired dark mode using glassmorphic UI components, smooth transitions, and custom scrollbars.
 
@@ -145,7 +145,7 @@ dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
 
 ### Paged lists (API)
 
-The lists that grow without limit are read with cursors instead of `skip`: the home feed (`GET /api/posts/feed`), a profile's posts and replies (`GET /api/posts/user/{id}` and `.../replies`), a post's replies (`GET /api/posts/{id}/replies`) and the notifications (`GET /api/notifications`).
+The lists that grow without limit are read with cursors instead of `skip`: the home feed (`GET /api/posts/feed`), a profile's posts and replies (`GET /api/posts/user/{id}` and `.../replies`), a post's replies (`GET /api/posts/{id}/replies`), the notifications (`GET /api/notifications`), and a user's followers and following (`GET /api/users/{id}/followers` and `.../following`, newest follow first).
 
 ```
 GET /api/posts/feed?take=20                     -> { "items": [ ... ], "nextCursor": "MTc4..." }
@@ -169,7 +169,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests
@@ -181,7 +181,8 @@ npm test
 
 `npm test` runs in watch mode; add `-- --watch=false` for a single run (what CI does). No API or database is needed: components run in jsdom against Angular's fake HTTP backend, so every request a page makes is checked (URL, method, paging parameters) and answered by the test.
 
-- **Paging:** `PagedList` (offsets after posting or deleting between pages, duplicates, cancelling, retry) and the Load more button, plus the feed, profile tabs and reply threads that use them.
+- **Paging:** `PagedList` (cursors, adding and removing entries locally, duplicates, cancelling, retry) and the Load more button, plus the feed, profile tabs and reply threads that use them.
+- **People lists:** the followers/following page (both tabs, paging, empty and failing lists, switching profiles, the route matcher), the shared user row with its follow button, and the sidebar search and "Who to follow" widgets.
 - **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
 - **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.

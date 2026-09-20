@@ -57,35 +57,14 @@ public class FollowsTests(ApiFixture api)
         await carol.FollowAsync(alice);
         await alice.FollowAsync(bob);
 
-        var followers = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/{alice.Id}/followers", TestUser.Json);
-        Assert.Equal(new[] { bob.Id, carol.Id }.Order(), followers!.Select(u => u.Id).Order());
+        var followers = await api.Anonymous.GetItemsAsync<UserResponse>($"/api/users/{alice.Id}/followers");
+        Assert.Equal(new[] { bob.Id, carol.Id }.Order(), followers.Select(u => u.Id).Order());
 
-        var following = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/{alice.Id}/following", TestUser.Json);
-        Assert.Equal(new[] { bob.Id }, following!.Select(u => u.Id));
+        var following = await api.Anonymous.GetItemsAsync<UserResponse>($"/api/users/{alice.Id}/following");
+        Assert.Equal(new[] { bob.Id }, following.Select(u => u.Id));
 
         Assert.All(followers.Concat(following), u => Assert.True(string.IsNullOrEmpty(u.Email)));
     }
 
-    [Fact]
-    public async Task FollowerLists_ArePaged_AndBounded()
-    {
-        var alice = await api.RegisterAsync("alice");
-        var followers = new List<TestUser>();
-        for (var i = 0; i < 3; i++)
-        {
-            var follower = await api.RegisterAsync("fan");
-            await follower.FollowAsync(alice);
-            followers.Add(follower);
-        }
-
-        var firstPage = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/{alice.Id}/followers?skip=0&take=2", TestUser.Json);
-        var secondPage = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/{alice.Id}/followers?skip=2&take=2", TestUser.Json);
-        Assert.Equal(2, firstPage!.Count);
-        Assert.Single(secondPage!);
-        Assert.Equal(followers.Select(f => f.Id).Order(), firstPage.Concat(secondPage).Select(u => u.Id).Order());
-
-        // Nonsense paging values are clamped rather than causing errors.
-        await (await api.Anonymous.GetAsync($"/api/users/{alice.Id}/followers?skip=-9&take=0")).ShouldBeAsync(HttpStatusCode.OK);
-        await (await api.Anonymous.GetAsync($"/api/users/{alice.Id}/following?skip=-9&take=100000")).ShouldBeAsync(HttpStatusCode.OK);
-    }
+    // Paging, order and changes between pages are covered by FollowListTests.
 }

@@ -109,8 +109,12 @@ namespace XCloneAPI.Data
                 .HasIndex(f => new { f.FollowerId, f.FollowingId })
                 .IsUnique();
 
+            // The followers and the following of a user are read newest first, in id order (cursor paging)
             modelBuilder.Entity<Follow>()
-                .HasIndex(f => f.FollowerId);
+                .HasIndex(f => new { f.FollowingId, f.Id });
+
+            modelBuilder.Entity<Follow>()
+                .HasIndex(f => new { f.FollowerId, f.Id });
 
             // Notification Configuration
             modelBuilder.Entity<Notification>()

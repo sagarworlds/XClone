@@ -1,4 +1,4 @@
-import { Routes } from '@angular/router';
+import { Routes, UrlMatcher } from '@angular/router';
 import { inject } from '@angular/core';
 import { ApiService } from './services/api.service';
 import { Router } from '@angular/router';
@@ -20,6 +20,13 @@ const guestGuard = () => {
   }
   return router.createUrlTree(['/home']);
 };
+
+// /profile/:username/followers and /profile/:username/following share one page (and one route, so the page is kept
+// when switching between the two lists)
+export const followListMatcher: UrlMatcher = (segments) =>
+  segments.length === 3 && segments[0].path === 'profile' && (segments[2].path === 'followers' || segments[2].path === 'following')
+    ? { consumed: segments, posParams: { username: segments[1], list: segments[2] } }
+    : null;
 
 export const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -46,6 +53,11 @@ export const routes: Routes = [
   {
     path: 'notifications',
     loadComponent: () => import('./components/notifications').then(m => m.NotificationsComponent),
+    canActivate: [authGuard]
+  },
+  {
+    matcher: followListMatcher,
+    loadComponent: () => import('./components/follow-list').then(m => m.FollowListComponent),
     canActivate: [authGuard]
   },
   {
