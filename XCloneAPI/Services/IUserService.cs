@@ -9,7 +9,7 @@ namespace XCloneAPI.Services
         Task<List<UserResponse>> GetSuggestionsAsync(int currentUserId, int take);
         Task<List<UserResponse>> SearchUsersAsync(string query, int currentUserId, int take);
         Task<UserResponse> UpdateProfileAsync(int userId, UpdateProfileRequest request);
-        Task<List<UserResponse>> GetFollowersAsync(int userId, int currentUserId, int skip, int take);
-        Task<List<UserResponse>> GetFollowingAsync(int userId, int currentUserId, int skip, int take);
+        Task<PagedResponse<UserResponse>> GetFollowersAsync(int userId, int currentUserId, int? beforeId, int take);
+        Task<PagedResponse<UserResponse>> GetFollowingAsync(int userId, int currentUserId, int? beforeId, int take);
     }
 }

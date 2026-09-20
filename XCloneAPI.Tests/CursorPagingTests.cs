@@ -359,6 +359,7 @@ public class CursorPagingTests(ApiFixture api)
     public static IEnumerable<object[]> AllPagedEndpoints() => new[]
     {
         Feed, "/api/posts/user/1", "/api/posts/user/1/replies", "/api/posts/1/replies", "/api/notifications",
+        "/api/users/1/followers", "/api/users/1/following",
     }.Select(path => new object[] { path });
 
     [Theory]
@@ -387,6 +388,8 @@ public class CursorPagingTests(ApiFixture api)
         // a feed cursor on a list that is ordered by id, and an id cursor on the feed
         await (await me.GetAsync(PagingExtensions.PagePath("/api/posts/1/replies", timelineCursor))).ShouldBeAsync(HttpStatusCode.BadRequest);
         await (await me.GetAsync(PagingExtensions.PagePath("/api/notifications", timelineCursor))).ShouldBeAsync(HttpStatusCode.BadRequest);
+        await (await me.GetAsync(PagingExtensions.PagePath("/api/users/1/followers", timelineCursor))).ShouldBeAsync(HttpStatusCode.BadRequest);
+        await (await me.GetAsync(PagingExtensions.PagePath("/api/users/1/following", timelineCursor))).ShouldBeAsync(HttpStatusCode.BadRequest);
         await (await me.GetAsync(PagingExtensions.PagePath(Feed, idCursor))).ShouldBeAsync(HttpStatusCode.BadRequest);
     }
 

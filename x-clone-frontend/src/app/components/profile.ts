@@ -76,12 +76,12 @@ import { WidgetsComponent } from './widgets';
               </div>
 
               <div class="follow-counts">
-                <span class="follow-item">
+                <a class="follow-item" [routerLink]="['/profile', profile()?.username, 'following']">
                   <strong class="count-value">{{ profile()?.followingCount || 0 }}</strong> Following
-                </span>
-                <span class="follow-item">
+                </a>
+                <a class="follow-item" [routerLink]="['/profile', profile()?.username, 'followers']">
                   <strong class="count-value">{{ profile()?.followersCount || 0 }}</strong> Followers
-                </span>
+                </a>
               </div>
             </div>
           </div>
@@ -284,7 +284,7 @@ import { WidgetsComponent } from './widgets';
       color: var(--text-secondary);
     }
     .follow-item {
-      cursor: pointer;
+      color: inherit;
     }
     .follow-item:hover {
       text-decoration: underline;

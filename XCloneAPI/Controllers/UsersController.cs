@@ -13,6 +13,7 @@ namespace XCloneAPI.Controllers
         private readonly IUserService _userService;
         private readonly ILogger<UsersController> _logger;
         private const int MaxPageSize = 50;
+        private const string InvalidCursorMessage = "Invalid cursor";
 
         public UsersController(IUserService userService, ILogger<UsersController> logger)
         {
@@ -141,14 +142,16 @@ namespace XCloneAPI.Controllers
 
         [HttpGet("{id}/followers")]
         [AllowAnonymous]
-        public async Task<ActionResult<List<UserResponse>>> GetFollowers(int id, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<UserResponse>>> GetFollowers(int id, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
-                var followers = await _userService.GetFollowersAsync(id, currentUserId, skip, take);
+                var followers = await _userService.GetFollowersAsync(id, currentUserId, beforeId, take);
                 return Ok(followers);
             }
             catch (Exception ex)
@@ -160,14 +163,16 @@ namespace XCloneAPI.Controllers
 
         [HttpGet("{id}/following")]
         [AllowAnonymous]
-        public async Task<ActionResult<List<UserResponse>>> GetFollowing(int id, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<UserResponse>>> GetFollowing(int id, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
-                var following = await _userService.GetFollowingAsync(id, currentUserId, skip, take);
+                var following = await _userService.GetFollowingAsync(id, currentUserId, beforeId, take);
                 return Ok(following);
             }
             catch (Exception ex)

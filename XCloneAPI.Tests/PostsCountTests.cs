@@ -173,8 +173,8 @@ public class PostsCountTests(ApiFixture api)
         var found = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/search?query={bob.Username}", TestUser.Json);
         Assert.Equal(2, Assert.Single(found!, u => u.Id == bob.Id).PostsCount);
 
-        var followers = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/{bob.Id}/followers", TestUser.Json);
-        Assert.Equal(0, Assert.Single(followers!).PostsCount);   // alice, who has not posted
+        var followers = await api.Anonymous.GetItemsAsync<UserResponse>($"/api/users/{bob.Id}/followers");
+        Assert.Equal(0, Assert.Single(followers).PostsCount);   // alice, who has not posted
     }
 
     [Fact]

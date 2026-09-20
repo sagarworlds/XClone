@@ -131,25 +131,24 @@ namespace XCloneAPI.Services
             }
         }
 
-        public async Task<List<UserResponse>> GetFollowersAsync(int userId, int currentUserId, int skip, int take)
+        // Who follows the user, newest follow first. Follow ids only ever grow, so id order is time order, and a page
+        // starts below the id the cursor names.
+        public async Task<PagedResponse<UserResponse>> GetFollowersAsync(int userId, int currentUserId, int? beforeId, int take)
         {
             try
             {
-                var followers = await _context.Follows
-                    .Where(f => f.FollowingId == userId)
-                    .Include(f => f.Follower)
-                    .Skip(skip)
-                    .Take(take)
-                    .Select(f => f.Follower)
+                var follows = _context.Follows.Where(f => f.FollowingId == userId);
+                if (beforeId != null)
+                    follows = follows.Where(f => f.Id < beforeId);
+
+                // One more than asked for tells whether there is a next page
+                var rows = await follows
+                    .OrderByDescending(f => f.Id)
+                    .Take(take + 1)
+                    .Select(f => new FollowRow { FollowId = f.Id, User = f.Follower })
                     .ToListAsync();
 
-                var responses = new List<UserResponse>();
-                foreach (var follower in followers)
-                {
-                    responses.Add(await MapToUserResponseAsync(follower, currentUserId));
-                }
-
-                return responses;
+                return await BuildUserPageAsync(rows, take, currentUserId);
             }
             catch (Exception ex)
             {
@@ -158,31 +157,56 @@ namespace XCloneAPI.Services
             }
         }
 
-        public async Task<List<UserResponse>> GetFollowingAsync(int userId, int currentUserId, int skip, int take)
+        // Who the user follows, newest follow first.
+        public async Task<PagedResponse<UserResponse>> GetFollowingAsync(int userId, int currentUserId, int? beforeId, int take)
         {
             try
             {
-                var following = await _context.Follows
-                    .Where(f => f.FollowerId == userId)
-                    .Include(f => f.Following)
-                    .Skip(skip)
-                    .Take(take)
-                    .Select(f => f.Following)
+                var follows = _context.Follows.Where(f => f.FollowerId == userId);
+                if (beforeId != null)
+                    follows = follows.Where(f => f.Id < beforeId);
+
+                var rows = await follows
+                    .OrderByDescending(f => f.Id)
+                    .Take(take + 1)
+                    .Select(f => new FollowRow { FollowId = f.Id, User = f.Following })
                     .ToListAsync();
 
-                var responses = new List<UserResponse>();
-                foreach (var user in following)
-                {
-                    responses.Add(await MapToUserResponseAsync(user, currentUserId));
-                }
-
-                return responses;
+                return await BuildUserPageAsync(rows, take, currentUserId);
             }
             catch (Exception ex)
             {
                 _logger.LogError($"Error fetching following: {ex.Message}");
                 throw;
             }
+        }
+
+        // One row of a followers/following list: the follow (which is what the cursor points at) and the user on the
+        // other end of it.
+        private sealed class FollowRow
+        {
+            public int FollowId { get; set; }
+            public Models.User User { get; set; } = null!;
+        }
+
+        // The extra row of a query that asked for one more than the page size is not shown, it only proves there is
+        // more; the cursor points at the last row that is shown.
+        private async Task<PagedResponse<UserResponse>> BuildUserPageAsync(List<FollowRow> rows, int take, int currentUserId)
+        {
+            var hasMore = rows.Count > take;
+            var page = hasMore ? rows.Take(take).ToList() : rows;
+
+            var users = new List<UserResponse>();
+            foreach (var row in page)
+            {
+                users.Add(await MapToUserResponseAsync(row.User, currentUserId));
+            }
+
+            return new PagedResponse<UserResponse>
+            {
+                Items = users,
+                NextCursor = hasMore ? IdCursor.Encode(page[^1].FollowId) : null
+            };
         }
 
         private async Task<UserResponse> MapToUserResponseAsync(Models.User user, int currentUserId)
