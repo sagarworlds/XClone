@@ -18,6 +18,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     createdAt: '2026-01-01T00:00:00Z',
     followersCount: 0,
     followingCount: 0,
+    postsCount: 0,
     isFollowed: false,
     ...overrides,
   };
