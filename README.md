@@ -183,6 +183,7 @@ npm test
 
 - **Paging:** `PagedList` (offsets after posting or deleting between pages, duplicates, cancelling, retry) and the Load more button, plus the feed, profile tabs and reply threads that use them.
 - **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
+- **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.
 
 ### Continuous integration
