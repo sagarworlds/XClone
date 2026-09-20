@@ -90,7 +90,7 @@ public class PostsTests(ApiFixture api)
         await bob.CreatePostAsync("bob's post");
         var second = await alice.CreatePostAsync("second");
 
-        var posts = await api.Anonymous.GetFromJsonAsync<List<PostResponse>>($"/api/posts/user/{alice.Id}", TestUser.Json);
+        var posts = await api.Anonymous.GetItemsAsync<PostResponse>($"/api/posts/user/{alice.Id}");
 
         Assert.Equal(new[] { second.Id, first.Id }, posts!.Select(p => p.Id));
     }
@@ -162,11 +162,10 @@ public class PostsTests(ApiFixture api)
             ids.Add((await me.CreatePostAsync($"post {i}")).Id);
         ids.Reverse();   // newest first
 
-        var paged = new List<int>();
-        for (var skip = 0; skip < 5; skip += 2)
-            paged.AddRange((await me.FeedAsync(skip, 2)).Select(p => p.Id));
+        var pages = await me.ReadAllPagesAsync<PostResponse>("/api/posts/feed", take: 2);
 
-        Assert.Equal(ids, paged);
+        Assert.Equal(ids, pages.SelectMany(p => p.Items).Select(p => p.Id));
+        Assert.Equal(new[] { 2, 2, 1 }, pages.Select(p => p.Items.Count));
     }
 
     [Fact]
@@ -184,12 +183,11 @@ public class PostsTests(ApiFixture api)
             await db.SaveChangesAsync();
         });
 
-        Assert.Equal(50, (await me.FeedAsync(0, 100000)).Count);
-        Assert.Single(await me.FeedAsync(0, 0));       // take is clamped up to 1
-        Assert.Single(await me.FeedAsync(0, -3));
-        Assert.Equal(50, (await me.FeedAsync(-5, 100000)).Count);   // a negative skip is treated as 0
+        Assert.Equal(50, (await me.FeedAsync(100000)).Count);
+        Assert.Single(await me.FeedAsync(0));       // take is clamped up to 1
+        Assert.Single(await me.FeedAsync(-3));
 
-        var profilePosts = await api.Anonymous.GetFromJsonAsync<List<PostResponse>>($"/api/posts/user/{me.Id}?take=999999", TestUser.Json);
+        var profilePosts = await api.Anonymous.GetItemsAsync<PostResponse>($"/api/posts/user/{me.Id}?take=999999");
         Assert.Equal(50, profilePosts!.Count);
     }
 }

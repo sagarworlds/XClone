@@ -1,5 +1,6 @@
 import { computed, signal } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
+import { Page } from '../models/types';
 
 /** What the "Load more" button needs to know about a list. */
 export interface LoadMoreSource {
@@ -10,11 +11,12 @@ export interface LoadMoreSource {
 }
 
 /**
- * A list that is fetched one page at a time from an endpoint that pages with skip/take.
+ * A list that is fetched one page at a time from an endpoint that pages with cursors: every answer says where the
+ * next page starts (`nextCursor`), or that there is none.
  *
- * The server's list keeps changing while the page is open (the user posts, deletes, un-reposts, others post), so
- * the next page's `skip` is not just `items().length`. `offset` counts the server entries already covered and is
- * kept in step by addFirst / addLast / remove; an entry the server still returns twice is dropped by its key.
+ * A cursor is a position ("right after this entry"), not a count, so posting, deleting or un-reposting while the page
+ * is open cannot make the next page repeat or skip anything: the list only has to add and remove entries locally.
+ * (Entries the server does return twice are still dropped by their key, as a safety net.)
  */
 export class PagedList<T> {
   private readonly loaded = signal<T[]>([]);
@@ -30,15 +32,15 @@ export class PagedList<T> {
   /** The last request failed. */
   readonly failed = signal(false);
 
-  private offset = 0;
+  private nextCursor: string | null = null;
   private firstPageLoaded = false;
   private request: Subscription | null = null;
 
-  private readonly fetchPage: (skip: number, take: number) => Observable<T[]>;
+  private readonly fetchPage: (cursor: string | null, take: number) => Observable<Page<T>>;
   private readonly keyOf: (item: T) => string;
   readonly pageSize: number;
 
-  constructor(fetchPage: (skip: number, take: number) => Observable<T[]>, keyOf: (item: T) => string, pageSize = 20) {
+  constructor(fetchPage: (cursor: string | null, take: number) => Observable<Page<T>>, keyOf: (item: T) => string, pageSize = 20) {
     this.fetchPage = fetchPage;
     this.keyOf = keyOf;
     this.pageSize = pageSize;
@@ -50,7 +52,7 @@ export class PagedList<T> {
     this.request = null;
     this.loaded.set([]);
     this.tail.set([]);
-    this.offset = 0;
+    this.nextCursor = null;
     this.firstPageLoaded = false;
     this.loading.set(false);
     this.loadingMore.set(false);
@@ -61,7 +63,7 @@ export class PagedList<T> {
   loadFirst(): void {
     this.reset();
     this.loading.set(true);
-    this.request = this.fetchPage(0, this.pageSize).subscribe({
+    this.request = this.fetchPage(null, this.pageSize).subscribe({
       next: (page) => {
         this.firstPageLoaded = true;
         this.accept(page);
@@ -86,7 +88,7 @@ export class PagedList<T> {
 
     this.loadingMore.set(true);
     this.failed.set(false);
-    this.request = this.fetchPage(this.offset, this.pageSize).subscribe({
+    this.request = this.fetchPage(this.nextCursor, this.pageSize).subscribe({
       next: (page) => {
         this.accept(page);
         this.loadingMore.set(false);
@@ -98,44 +100,40 @@ export class PagedList<T> {
     });
   }
 
-  /** Something new at the top of the server's list, e.g. a post the user just wrote. */
+  /** Something new at the top, e.g. a post the user just wrote. */
   addFirst(item: T): void {
     this.loaded.update((current) => [item, ...current]);
-    this.offset++;
   }
 
-  /** Something new at the end of the server's list, e.g. a reply in an oldest-first thread. */
+  /** Something new at the end, e.g. a reply in an oldest-first thread. */
   addLast(item: T): void {
     if (this.hasMore()) {
+      // The pages before it are not loaded yet: keep it after them, and let the page that contains it take over
       this.tail.update((current) => [...current, item]);
     } else {
       this.loaded.update((current) => [...current, item]);
-      this.offset++;
     }
   }
 
   remove(matches: (item: T) => boolean): void {
-    const removed = this.loaded().filter(matches).length;
     this.loaded.update((current) => current.filter((item) => !matches(item)));
     this.tail.update((current) => current.filter((item) => !matches(item)));
-    this.offset = Math.max(0, this.offset - removed);
   }
 
-  private accept(page: T[]): void {
+  private accept(page: Page<T>): void {
     const keys = new Set(this.loaded().map(this.keyOf));
-    const fresh = page.filter((item) => {
+    const fresh = page.items.filter((item) => {
       const key = this.keyOf(item);
       if (keys.has(key)) return false;
       keys.add(key);
       return true;
     });
 
-    const returned = new Set(page.map(this.keyOf));
+    const returned = new Set(page.items.map(this.keyOf));
     this.loaded.update((current) => [...current, ...fresh]);
     this.tail.update((current) => current.filter((item) => !returned.has(this.keyOf(item))));
 
-    // Counts what the server sent, duplicates included: they are positions in its list that are now covered.
-    this.offset += page.length;
-    this.hasMore.set(page.length >= this.pageSize);
+    this.nextCursor = page.nextCursor;
+    this.hasMore.set(page.nextCursor !== null);
   }
 }

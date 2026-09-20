@@ -14,6 +14,7 @@ namespace XCloneAPI.Controllers
         private readonly IPostService _postService;
         private readonly ILogger<PostsController> _logger;
         private const int MaxPageSize = 50;
+        private const string InvalidCursorMessage = "Invalid cursor";
 
         public PostsController(IPostService postService, ILogger<PostsController> logger)
         {
@@ -66,14 +67,16 @@ namespace XCloneAPI.Controllers
         }
 
         [HttpGet("feed")]
-        public async Task<ActionResult<List<PostResponse>>> GetFeed([FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<PostResponse>>> GetFeed([FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!TimelineCursor.TryParse(cursor, out var after))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var userId = GetCurrentUserId();
-                var posts = await _postService.GetFeedAsync(userId, skip, take);
+                var posts = await _postService.GetFeedAsync(userId, after, take);
                 return Ok(posts);
             }
             catch (Exception ex)
@@ -85,14 +88,16 @@ namespace XCloneAPI.Controllers
 
         [HttpGet("user/{userId}")]
         [AllowAnonymous]
-        public async Task<ActionResult<List<PostResponse>>> GetUserPosts(int userId, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<PostResponse>>> GetUserPosts(int userId, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!TimelineCursor.TryParse(cursor, out var after))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
-                var posts = await _postService.GetUserPostsAsync(userId, currentUserId, skip, take);
+                var posts = await _postService.GetUserPostsAsync(userId, currentUserId, after, take);
                 return Ok(posts);
             }
             catch (Exception ex)
@@ -126,14 +131,16 @@ namespace XCloneAPI.Controllers
 
         [HttpGet("{id:int}/replies")]
         [AllowAnonymous]
-        public async Task<ActionResult<List<PostResponse>>> GetReplies(int id, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<PostResponse>>> GetReplies(int id, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!IdCursor.TryParse(cursor, out var afterId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
-                var replies = await _postService.GetRepliesAsync(id, currentUserId, skip, take);
+                var replies = await _postService.GetRepliesAsync(id, currentUserId, afterId, take);
                 return Ok(replies);
             }
             catch (Exception ex)
@@ -145,14 +152,16 @@ namespace XCloneAPI.Controllers
 
         [HttpGet("user/{userId:int}/replies")]
         [AllowAnonymous]
-        public async Task<ActionResult<List<PostResponse>>> GetUserReplies(int userId, [FromQuery] int skip = 0, [FromQuery] int take = 10)
+        public async Task<ActionResult<PagedResponse<PostResponse>>> GetUserReplies(int userId, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
                 var currentUserId = GetCurrentUserId();
-                var replies = await _postService.GetUserRepliesAsync(userId, currentUserId, skip, take);
+                var replies = await _postService.GetUserRepliesAsync(userId, currentUserId, beforeId, take);
                 return Ok(replies);
             }
             catch (Exception ex)

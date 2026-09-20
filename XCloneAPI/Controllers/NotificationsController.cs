@@ -26,13 +26,15 @@ namespace XCloneAPI.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetNotifications([FromQuery] int skip = 0, [FromQuery] int take = 20)
+        public async Task<IActionResult> GetNotifications([FromQuery] string? cursor = null, [FromQuery] int take = 20)
         {
             try
             {
-                skip = Math.Max(skip, 0);
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = "Invalid cursor" });
+
                 take = Math.Clamp(take, 1, MaxPageSize);
-                var notifications = await _notificationService.GetNotificationsAsync(GetCurrentUserId(), skip, take);
+                var notifications = await _notificationService.GetNotificationsAsync(GetCurrentUserId(), beforeId, take);
                 return Ok(notifications);
             }
             catch (Exception ex)

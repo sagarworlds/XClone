@@ -20,7 +20,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Authentication & Security**: Secure user registration and login using JWT (JSON Web Tokens).
 - **Home Timeline Feed**: A live feed of posts from the users you follow, featuring a character-limited (280 chars) tweet composer.
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
-- **Load more**: The home timeline, profile tabs and reply threads load 20 entries at a time with a "Load more" button. It stays correct while you post or delete in between (no duplicates, nothing skipped), and a failed page can be retried without losing what is already on screen.
+- **Load more**: The home timeline, profile tabs, reply threads and notifications load 20 entries at a time with a "Load more" button. Pages are read with cursors, so posting, deleting or undoing a repost in between (or other people doing the same) can never repeat or skip an entry, and a failed page can be retried without losing what is already on screen.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **Notifications**: You are told when someone replies to or reposts one of your posts (never for your own actions). The sidebar shows an unread badge that refreshes every 30 seconds, and the Notifications page lists everything newest first, highlights what is new, and marks it all as read when you open it. Undoing a repost, or deleting the reply or the post, takes its notification back.
@@ -49,7 +49,7 @@ XClone/
     │   ├── app/
     │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets, LoadMore, Notifications)
     │   │   ├── models/       # TypeScript Interfaces
-    │   │   ├── services/     # ApiService (signals state), PagedList (skip/take paging), NotificationsService (unread badge polling)
+    │   │   ├── services/     # ApiService (signals state), PagedList (cursor paging), NotificationsService (unread badge polling)
     │   │   └── app.routes.ts # SPA routing with functional auth guards
     │   │   (each *.spec.ts sits next to the code it tests; shared test helpers are in src/testing/)
     │   ├── environments/     # Environment-specific API configuration
@@ -143,6 +143,22 @@ dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
 
 ---
 
+### Paged lists (API)
+
+The lists that grow without limit are read with cursors instead of `skip`: the home feed (`GET /api/posts/feed`), a profile's posts and replies (`GET /api/posts/user/{id}` and `.../replies`), a post's replies (`GET /api/posts/{id}/replies`) and the notifications (`GET /api/notifications`).
+
+```
+GET /api/posts/feed?take=20                     -> { "items": [ ... ], "nextCursor": "MTc4..." }
+GET /api/posts/feed?take=20&cursor=MTc4...      -> the page right after that cursor
+```
+
+- `nextCursor` is opaque; pass it back as `cursor` to get the next page. It is `null` on the last page, so no extra empty request is needed.
+- A cursor is a *position* (the sort key of the last entry you saw), not a count, so entries that appear or disappear elsewhere in the list never shift a page.
+- `take` defaults to 10 (20 for notifications) and is clamped to 1-50. A malformed cursor answers `400 { "message": "Invalid cursor" }`.
+- The feed and profile posts merge original posts and reposts, newest first; ties are broken by post id and reposter, so the order is total.
+
+---
+
 ## 🧪 Tests
 
 `XCloneAPI.Tests` holds the API integration tests. They start the real API in-process and talk to a real PostgreSQL database (not a fake), so Postgres-specific behavior is exercised for real.
@@ -153,7 +169,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, notifications, timelines and paging, privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests

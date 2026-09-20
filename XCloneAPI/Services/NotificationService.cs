@@ -18,22 +18,28 @@ namespace XCloneAPI.Services
             _logger = logger;
         }
 
-        public async Task<List<NotificationResponse>> GetNotificationsAsync(int userId, int skip, int take)
+        // Newest first. Ids only ever grow, so id order is time order, and a page starts below the id the cursor names.
+        public async Task<PagedResponse<NotificationResponse>> GetNotificationsAsync(int userId, int? beforeId, int take)
         {
             try
             {
-                var notifications = await _context.Notifications
-                    .Where(n => n.RecipientId == userId)
-                    .OrderByDescending(n => n.CreatedAt)
-                    .ThenByDescending(n => n.Id)
-                    .Skip(skip)
-                    .Take(take)
+                var query = _context.Notifications.Where(n => n.RecipientId == userId);
+                if (beforeId != null)
+                    query = query.Where(n => n.Id < beforeId);
+
+                // One more than asked for tells whether there is a next page
+                var rows = await query
+                    .OrderByDescending(n => n.Id)
+                    .Take(take + 1)
                     .Include(n => n.Actor)
                     .Include(n => n.Post)
                     .AsNoTracking()
                     .ToListAsync();
 
-                return notifications.Select(n => new NotificationResponse
+                var hasMore = rows.Count > take;
+                var notifications = hasMore ? rows.Take(take).ToList() : rows;
+
+                var items = notifications.Select(n => new NotificationResponse
                 {
                     Id = n.Id,
                     Type = n.Type.ToString().ToLowerInvariant(),
@@ -49,6 +55,12 @@ namespace XCloneAPI.Services
                     IsRead = n.IsRead,
                     CreatedAt = n.CreatedAt
                 }).ToList();
+
+                return new PagedResponse<NotificationResponse>
+                {
+                    Items = items,
+                    NextCursor = hasMore ? IdCursor.Encode(notifications[^1].Id) : null
+                };
             }
             catch (Exception ex)
             {

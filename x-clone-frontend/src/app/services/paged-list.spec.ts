@@ -1,29 +1,39 @@
 import { Observable } from 'rxjs';
+import { Page } from '../models/types';
 import { PagedList } from './paged-list';
 
 interface Call {
-  skip: number;
+  cursor: string | null;
   take: number;
   /** True when the list unsubscribed before an answer arrived. */
   cancelled: boolean;
-  resolve(page: number[]): void;
+  resolve(page: Page<number>): void;
   reject(): void;
 }
 
 const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 /**
- * A fake endpoint. `server` is the list the API pages over (tests change it to simulate other people's activity).
+ * A fake endpoint that pages with cursors over `server`, the way the API does: the cursor names the last entry of the
+ * previous page and a page is what comes strictly after it. `order` says which way the list is sorted (numbers newest
+ * first, or oldest first like a thread). Tests change `server` to simulate what other people do meanwhile.
  * With `manual`, nothing is answered until the test calls resolve()/reject() on the recorded call.
  */
-function setup(server: number[] = [], pageSize = 20, manual = false) {
+function setup(server: number[] = [], pageSize = 20, manual = false, order: 'newestFirst' | 'oldestFirst' = 'newestFirst') {
   const calls: Call[] = [];
+
+  const pageAfter = (cursor: string | null, take: number): Page<number> => {
+    const after = server.filter((n) => cursor === null || (order === 'newestFirst' ? n < Number(cursor) : n > Number(cursor)));
+    const items = after.slice(0, take);
+    return { items, nextCursor: after.length > take ? String(items[items.length - 1]) : null };
+  };
+
   const list = new PagedList<number>(
-    (skip, take) =>
-      new Observable<number[]>((subscriber) => {
+    (cursor, take) =>
+      new Observable<Page<number>>((subscriber) => {
         let answered = false;
         const call: Call = {
-          skip,
+          cursor,
           take,
           cancelled: false,
           resolve: (page) => {
@@ -37,7 +47,7 @@ function setup(server: number[] = [], pageSize = 20, manual = false) {
           },
         };
         calls.push(call);
-        if (!manual) call.resolve(server.slice(skip, skip + take));
+        if (!manual) call.resolve(pageAfter(cursor, take));
         return () => {
           call.cancelled = !answered;
         };
@@ -48,47 +58,60 @@ function setup(server: number[] = [], pageSize = 20, manual = false) {
   return { list, calls, server };
 }
 
+const newestFirst = (from: number, to: number) => range(from, to).reverse();
+
 describe('PagedList', () => {
   describe('paging', () => {
-    it('loads page after page and stops when a page comes back short', () => {
-      const { list } = setup(range(1, 45));
+    it('loads page after page and stops when the server says there is no next page', () => {
+      const { list } = setup(newestFirst(1, 45));
 
       list.loadFirst();
-      expect(list.items()).toEqual(range(1, 20));
+      expect(list.items()).toEqual(newestFirst(26, 45));
       expect(list.hasMore()).toBe(true);
 
       list.loadMore();
-      expect(list.items()).toEqual(range(1, 40));
+      expect(list.items()).toEqual(newestFirst(6, 45));
       expect(list.hasMore()).toBe(true);
 
       list.loadMore();
-      expect(list.items()).toEqual(range(1, 45));
+      expect(list.items()).toEqual(newestFirst(1, 45));
       expect(list.hasMore()).toBe(false);
 
       list.loadMore();
-      expect(list.items()).toEqual(range(1, 45));
+      expect(list.items()).toEqual(newestFirst(1, 45));
     });
 
-    it('asks for the next page at the right offset', () => {
-      const { list, calls } = setup(range(1, 45));
+    it('asks for each page with the cursor the previous one returned', () => {
+      const { list, calls } = setup(newestFirst(1, 45));
+
+      list.loadFirst();
+      list.loadMore();
+      list.loadMore();
+
+      expect(calls.map((c) => [c.cursor, c.take])).toEqual([[null, 20], ['26', 20], ['6', 20]]);
+    });
+
+    it('needs no extra empty request after an exact multiple, because the server says the list ended', () => {
+      const { list, calls } = setup(newestFirst(1, 40));
 
       list.loadFirst();
       list.loadMore();
 
-      expect(calls.map((c) => [c.skip, c.take])).toEqual([[0, 20], [20, 20]]);
-    });
-
-    it('needs one more (empty) request to learn that an exact multiple has ended', () => {
-      const { list, calls } = setup(range(1, 40));
-
-      list.loadFirst();
-      list.loadMore();
-      expect(list.hasMore()).toBe(true);
-
-      list.loadMore();
       expect(list.hasMore()).toBe(false);
       expect(list.items()).toHaveLength(40);
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(2);
+    });
+
+    it('goes by what the server says about more pages, not by how full the page is', () => {
+      const { list, calls } = setup([], 20, true);
+
+      list.loadFirst();
+      calls[0].resolve({ items: range(1, 20), nextCursor: null }); // a full page, but the end
+      expect(list.hasMore()).toBe(false);
+
+      list.loadFirst();
+      calls[1].resolve({ items: [1, 2, 3], nextCursor: 'more' }); // a short page (e.g. entries filtered out), but not the end
+      expect(list.hasMore()).toBe(true);
     });
 
     it('does nothing before the first page is there', () => {
@@ -105,7 +128,7 @@ describe('PagedList', () => {
     it('fetches once when Load more is pressed twice', () => {
       const { list, calls } = setup([], 20, true);
       list.loadFirst();
-      calls[0].resolve(range(1, 20));
+      calls[0].resolve({ items: range(1, 20), nextCursor: '20' });
 
       list.loadMore();
       list.loadMore();
@@ -115,81 +138,93 @@ describe('PagedList', () => {
     });
 
     it('honours the page size it was given', () => {
-      const { list, calls } = setup(range(1, 12), 5);
+      const { list, calls } = setup(newestFirst(1, 12), 5);
 
       list.loadFirst();
       list.loadMore();
 
-      expect(list.items()).toEqual(range(1, 10));
-      expect(calls[1]).toMatchObject({ skip: 5, take: 5 });
+      expect(list.items()).toEqual(newestFirst(3, 12));
+      expect(calls[1]).toMatchObject({ cursor: '8', take: 5 });
     });
   });
 
   describe('when the list changes while the page is open', () => {
-    it('does not repeat or skip anything after the user adds something at the top', () => {
-      const { list, server } = setup(range(1, 45).reverse()); // 45..1
+    it('is not disturbed when the user adds something at the top', () => {
+      const { list, server, calls } = setup(newestFirst(1, 45));
       list.loadFirst(); // 45..26
 
       server.unshift(46);
       list.addFirst(46);
       list.loadMore();
 
-      expect(list.items()).toEqual([46, ...range(1, 45).reverse().slice(0, 40)]);
+      expect(calls[1].cursor).toBe('26'); // the same position, however much was added above it
+      expect(list.items()).toEqual([46, ...newestFirst(6, 45)]);
     });
 
-    it('does not skip the next entry after the user deletes a loaded one', () => {
-      const { list, server } = setup(range(1, 45));
+    it('is not disturbed when the user deletes a loaded entry', () => {
+      const { list, server, calls } = setup(newestFirst(1, 45));
       list.loadFirst();
 
-      server.splice(server.indexOf(5), 1);
-      list.remove((n) => n === 5);
+      server.splice(server.indexOf(40), 1);
+      list.remove((n) => n === 40);
       list.loadMore();
 
-      expect(list.items()).toEqual(range(1, 40).filter((n) => n !== 5));
+      expect(calls[1].cursor).toBe('26');
+      expect(list.items()).toEqual(newestFirst(6, 45).filter((n) => n !== 40));
     });
 
-    it('moves the offset by as many entries as were removed (a post and its reposts)', () => {
-      const { list, server } = setup(range(1, 60));
-      list.loadFirst();
-      const gone = (n: number) => n === 3 || n === 7 || n === 11;
+    it('still works when the entry the cursor points at is the one that gets deleted', () => {
+      const { list, server } = setup(newestFirst(1, 45));
+      list.loadFirst(); // the cursor points at 26
 
-      for (const n of [3, 7, 11]) server.splice(server.indexOf(n), 1);
+      server.splice(server.indexOf(26), 1);
+      list.remove((n) => n === 26);
+      list.loadMore();
+
+      expect(list.items()).toEqual(newestFirst(6, 45).filter((n) => n !== 26)); // nothing skipped, nothing repeated
+    });
+
+    it('removes several matching entries (a post and its reposts) without any bookkeeping', () => {
+      const { list, server } = setup(newestFirst(1, 60));
+      list.loadFirst();
+      const gone = (n: number) => n === 45 || n === 50 || n === 55;
+
+      for (const n of [45, 50, 55]) server.splice(server.indexOf(n), 1);
       list.remove(gone);
       list.loadMore();
 
-      expect(list.items()).toEqual(range(1, 40).filter((n) => !gone(n)));
+      expect(list.items()).toEqual(newestFirst(21, 60).filter((n) => !gone(n)));
     });
 
-    it('drops the one duplicate that appears when someone else posts in the meantime', () => {
-      const { list, server } = setup(range(1, 45).reverse());
-      list.loadFirst();
-
-      server.unshift(99); // not known to the list
-      list.loadMore();
-
-      const items = list.items();
-      expect(new Set(items).size).toBe(items.length);
-      expect(items).toEqual(range(1, 45).reverse().slice(0, 39));
-      expect(list.hasMore()).toBe(true);
-    });
-
-    it('moves on even when a whole page turns out to be duplicates, so Load more cannot get stuck', () => {
-      const { list, server } = setup(range(1, 60).reverse()); // 60..1
+    it('repeats nothing when other people post in the meantime, however many they are', () => {
+      const { list, server } = setup(newestFirst(1, 60));
       list.loadFirst(); // 60..41
 
-      server.unshift(...range(101, 120)); // twenty new posts by other people
-      list.loadMore(); // everything that comes back is already shown
-      expect(list.items()).toEqual(range(41, 60).reverse());
-      expect(list.hasMore()).toBe(true);
-
+      server.unshift(...newestFirst(101, 140)); // forty new posts by other people
       list.loadMore();
-      expect(list.items()).toEqual(range(21, 60).reverse());
+
+      expect(list.items()).toEqual(newestFirst(21, 60)); // the new ones wait for the next refresh; nothing is repeated or missing
+      expect(list.hasMore()).toBe(true);
+    });
+
+    it('skips nothing when other people delete entries you have not reached yet', () => {
+      const { list, server } = setup(newestFirst(1, 60));
+      list.loadFirst();
+
+      const gone = [30, 31, 32];
+      for (const n of gone) server.splice(server.indexOf(n), 1);
+      list.loadMore();
+
+      // The next page is simply the next 20 entries that still exist
+      expect(list.items()).toEqual([...newestFirst(41, 60), ...newestFirst(1, 40).filter((n) => !gone.includes(n)).slice(0, 20)]);
     });
   });
 
   describe('entries added at the end (a reply in an oldest-first thread)', () => {
+    const thread = (count: number) => setup(range(1, count), 20, false, 'oldestFirst');
+
     it('keeps a new entry after the pages that are not loaded yet, and puts it in place once it is loaded', () => {
-      const { list, server } = setup(range(1, 45));
+      const { list, server, calls } = thread(45);
       list.loadFirst();
 
       server.push(46);
@@ -197,6 +232,7 @@ describe('PagedList', () => {
       expect(list.items()).toEqual([...range(1, 20), 46]);
 
       list.loadMore();
+      expect(calls[1].cursor).toBe('20'); // the reply does not move where the next page starts
       expect(list.items()).toEqual([...range(1, 40), 46]);
 
       list.loadMore();
@@ -205,7 +241,7 @@ describe('PagedList', () => {
     });
 
     it('simply appends when everything is loaded already', () => {
-      const { list, server } = setup(range(1, 10));
+      const { list, server } = thread(10);
       list.loadFirst();
 
       server.push(11);
@@ -215,8 +251,8 @@ describe('PagedList', () => {
       expect(list.hasMore()).toBe(false);
     });
 
-    it('leaves the offset alone when such a pending entry is deleted again', () => {
-      const { list, server } = setup(range(1, 45));
+    it('forgets such a pending entry when it is deleted again', () => {
+      const { list, server } = thread(45);
       list.loadFirst();
       server.push(46);
       list.addLast(46);
@@ -237,10 +273,10 @@ describe('PagedList', () => {
       list.loadFirst();
       expect(calls[0].cancelled).toBe(true);
 
-      calls[0].resolve([1, 2, 3]); // the answer for what was on screen before
+      calls[0].resolve({ items: [1, 2, 3], nextCursor: null }); // the answer for what was on screen before
       expect(list.items()).toEqual([]);
 
-      calls[1].resolve([7, 8]);
+      calls[1].resolve({ items: [7, 8], nextCursor: null });
       expect(list.items()).toEqual([7, 8]);
       expect(list.loading()).toBe(false);
     });
@@ -248,7 +284,7 @@ describe('PagedList', () => {
     it('reset() cancels what is running and clears everything', () => {
       const { list, calls } = setup([], 20, true);
       list.loadFirst();
-      calls[0].resolve(range(1, 20));
+      calls[0].resolve({ items: range(1, 20), nextCursor: '20' });
       list.loadMore();
 
       list.reset();
@@ -259,22 +295,32 @@ describe('PagedList', () => {
       expect(list.loadingMore()).toBe(false);
     });
 
+    it('starts from the beginning again after a reset, not from the old cursor', () => {
+      const { list, calls } = setup([], 20, true);
+      list.loadFirst();
+      calls[0].resolve({ items: range(1, 20), nextCursor: '20' });
+
+      list.loadFirst();
+
+      expect(calls[1].cursor).toBeNull();
+    });
+
     it('shows the first page as loading until it arrives', () => {
       const { list, calls } = setup([], 20, true);
 
       list.loadFirst();
       expect(list.loading()).toBe(true);
 
-      calls[0].resolve([1]);
+      calls[0].resolve({ items: [1], nextCursor: null });
       expect(list.loading()).toBe(false);
     });
   });
 
   describe('failures', () => {
-    it('keeps what is loaded when a page fails, and a retry picks up where it left off', () => {
+    it('keeps what is loaded when a page fails, and a retry asks for the same page again', () => {
       const { list, calls } = setup([], 20, true);
       list.loadFirst();
-      calls[0].resolve(range(1, 20));
+      calls[0].resolve({ items: range(1, 20), nextCursor: '20' });
 
       list.loadMore();
       calls[1].reject();
@@ -285,8 +331,8 @@ describe('PagedList', () => {
 
       list.loadMore();
       expect(list.failed()).toBe(false);
-      expect(calls[2].skip).toBe(20);
-      calls[2].resolve(range(21, 25));
+      expect(calls[2].cursor).toBe('20');
+      calls[2].resolve({ items: range(21, 25), nextCursor: null });
       expect(list.items()).toEqual(range(1, 25));
       expect(list.hasMore()).toBe(false);
     });
@@ -311,7 +357,7 @@ describe('PagedList', () => {
       list.ensureLoaded();
       expect(calls).toHaveLength(1);
 
-      calls[0].resolve([1]);
+      calls[0].resolve({ items: [1], nextCursor: null });
       list.ensureLoaded();
       expect(calls).toHaveLength(1);
     });
@@ -325,5 +371,16 @@ describe('PagedList', () => {
 
       expect(calls).toHaveLength(2);
     });
+  });
+
+  it('drops an entry the server returns twice (a safety net)', () => {
+    const { list, calls } = setup([], 20, true);
+    list.loadFirst();
+    calls[0].resolve({ items: [5, 4, 3], nextCursor: '3' });
+
+    list.loadMore();
+    calls[1].resolve({ items: [3, 2, 1], nextCursor: null });
+
+    expect(list.items()).toEqual([5, 4, 3, 2, 1]);
   });
 });

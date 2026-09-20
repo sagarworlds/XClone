@@ -123,7 +123,7 @@ export class PostDetailComponent implements OnInit {
   private readonly location = inject(Location);
 
   post = signal<Post | null>(null);
-  readonly replies = new PagedList<Post>((skip, take) => this.api.getReplies(this.post()!.id, skip, take), (p) => String(p.id));
+  readonly replies = new PagedList<Post>((cursor, take) => this.api.getReplies(this.post()!.id, cursor, take), (p) => String(p.id));
   loading = signal(true);
 
   readonly createReply = (content: string) => this.api.createReply(this.post()!.id, content);

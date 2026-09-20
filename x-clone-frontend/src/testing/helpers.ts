@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting, TestRequest } from '@a
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Routes } from '@angular/router';
 import { environment } from '../environments/environment';
-import { AppNotification, Post, User } from '../app/models/types';
+import { AppNotification, Page, Post, User } from '../app/models/types';
 
 export const API = environment.apiUrl;
 
@@ -75,15 +75,23 @@ export function http(): HttpTestingController {
   return TestBed.inject(HttpTestingController);
 }
 
-/** The single pending GET for a paged endpoint, e.g. expectPage('/posts/feed', 20, 20). */
-export function expectPage(path: string, skip: number, take = 20): TestRequest {
+/** One page of a cursor-paged list, the way the API answers. */
+export function pageOf<T>(items: T[], nextCursor: string | null = null): Page<T> {
+  return { items, nextCursor };
+}
+
+/**
+ * The single pending GET for a paged endpoint: the first page when `cursor` is null (no cursor is sent),
+ * otherwise the page after that cursor. E.g. expectPage('/posts/feed'), expectPage('/posts/feed', 'c1').
+ */
+export function expectPage(path: string, cursor: string | null = null, take = 20): TestRequest {
   return http().expectOne(
     (r) =>
       r.method === 'GET' &&
       r.url === `${API}${path}` &&
-      r.params.get('skip') === String(skip) &&
+      r.params.get('cursor') === cursor &&
       r.params.get('take') === String(take),
-    `GET ${path}?skip=${skip}&take=${take}`,
+    `GET ${path}?take=${take}${cursor === null ? '' : `&cursor=${cursor}`}`,
   );
 }
 

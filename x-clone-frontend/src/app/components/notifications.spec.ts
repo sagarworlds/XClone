@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NotificationsService } from '../services/notifications.service';
-import { API, answerBackgroundRequests, expectPage, http, makeNotification, makeUser, provideAppTesting, range, signInAs } from '../../testing/helpers';
+import { API, answerBackgroundRequests, expectPage, http, makeNotification, makeUser, pageOf, provideAppTesting, range, signInAs } from '../../testing/helpers';
 import { AppNotification } from '../models/types';
 import { NotificationsComponent } from './notifications';
 
@@ -12,13 +12,17 @@ describe('NotificationsComponent', () => {
   const items = () => [...el().querySelectorAll<HTMLAnchorElement>('a.notification')];
   const settle = () => fixture.whenStable();
 
-  /** Opens the page and answers its first request with `firstPage`. */
-  async function open(firstPage: AppNotification[], unreadBadge = firstPage.filter((n) => !n.isRead).length) {
+  /** Opens the page and answers its first request with `firstPage`. A full page of 20 is assumed to have more after it, as the API would say; anything shorter is everything. */
+  async function open(
+    firstPage: AppNotification[],
+    unreadBadge = firstPage.filter((n) => !n.isRead).length,
+    nextCursor: string | null = firstPage.length >= 20 ? `after-${firstPage[firstPage.length - 1].id}` : null,
+  ) {
     fixture = TestBed.createComponent(NotificationsComponent);
     fixture.detectChanges();
     await settle();
     answerBackgroundRequests(unreadBadge);
-    expectPage('/notifications', 0).flush(firstPage);
+    expectPage('/notifications').flush(pageOf(firstPage, nextCursor));
     await settle();
   }
 
@@ -117,7 +121,7 @@ describe('NotificationsComponent', () => {
       expect(button()?.textContent?.trim()).toBe('Load more');
 
       button()!.click();
-      expectPage('/notifications', 20).flush(page(21, 23));
+      expectPage('/notifications', 'after-20').flush(pageOf(page(21, 23)));
       await settle();
 
       expect(items()).toHaveLength(23);
@@ -128,7 +132,7 @@ describe('NotificationsComponent', () => {
       await open([...range(1, 20).map((id) => makeNotification(id, { isRead: true }))]);
       el().querySelector<HTMLButtonElement>('.load-more-btn')!.click();
 
-      expectPage('/notifications', 20).flush([makeNotification(21, { isRead: false })]);
+      expectPage('/notifications', 'after-20').flush(pageOf([makeNotification(21, { isRead: false })]));
       await settle();
 
       http().expectNone(READ_ALL);
@@ -156,7 +160,7 @@ describe('NotificationsComponent', () => {
       await settle();
       answerBackgroundRequests();
 
-      expectPage('/notifications', 0).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expectPage('/notifications').flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
       await settle();
 
       expect(el().textContent).toContain("Couldn't load notifications");

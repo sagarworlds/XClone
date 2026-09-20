@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { API, answerBackgroundRequests, expectPage, http, makePost, makeUser, provideAppTesting, range, signInAs } from '../../testing/helpers';
+import { API, answerBackgroundRequests, expectPage, http, makePost, makeUser, pageOf, provideAppTesting, range, signInAs } from '../../testing/helpers';
 import { Post, User } from '../models/types';
 import { ProfileComponent } from './profile';
 
@@ -31,9 +31,13 @@ describe('ProfileComponent', () => {
     await settle();
   }
 
-  async function openWithPosts(first: Post[], user: User = alice) {
+  /** The cursor the API hands out after a page whose last entry is this post. */
+  const after = (id: number) => `after-${id}`;
+
+  /** A full page of 20 is assumed to have more after it, as the API would say; anything shorter is everything. */
+  async function openWithPosts(first: Post[], user: User = alice, nextCursor: string | null = first.length >= 20 ? after(first[first.length - 1].id) : null) {
     await open(user);
-    expectPage(`/posts/user/${user.id}`, 0).flush(first);
+    expectPage(`/posts/user/${user.id}`).flush(pageOf(first, nextCursor));
     await settle();
   }
 
@@ -67,7 +71,7 @@ describe('ProfileComponent', () => {
       await openWithPosts(posts(7, 26));
 
       loadMoreButton()!.click();
-      expectPage('/posts/user/5', 20).flush(posts(1, 6));
+      expectPage('/posts/user/5', after(7)).flush(pageOf(posts(1, 6)));
       await settle();
 
       expect(cards()).toHaveLength(26);
@@ -99,7 +103,7 @@ describe('ProfileComponent', () => {
       expect(el().textContent).toContain("hasn't posted anything yet");
     });
 
-    it('asks for the next page one entry earlier after you undo your own repost from your profile', async () => {
+    it('takes your own repost out of your profile when you undo it, and the next page still starts where it did', async () => {
       const repost = makePost(30, { user: alice, userId: alice.id, retweetedBy: me, isRetweeted: true });
       await openWithPosts([...posts(31, 49, me), repost], me);
       expect(cards()).toHaveLength(20);
@@ -112,12 +116,12 @@ describe('ProfileComponent', () => {
       expect(header()).toBe('19 posts'); // adjusted on the spot: no request that could overtake the undo
 
       loadMoreButton()!.click();
-      expectPage('/posts/user/1', 19).flush(posts(1, 10, me));
+      expectPage('/posts/user/1', after(30)).flush(pageOf(posts(1, 10, me)));
       await settle();
       expect(cards()).toHaveLength(29);
     });
 
-    it('asks for the next page one entry earlier after you delete one of your posts', async () => {
+    it('removes a post you delete, and the next page still starts where it did', async () => {
       await openWithPosts(posts(30, 49, me), me);
 
       cards()[0].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
@@ -129,7 +133,7 @@ describe('ProfileComponent', () => {
       expect(header()).toBe('19 posts');
 
       loadMoreButton()!.click();
-      expectPage('/posts/user/1', 19).flush([]);
+      expectPage('/posts/user/1', after(30)).flush(pageOf([]));
       await settle();
       expect(cards()).toHaveLength(19);
     });
@@ -138,7 +142,7 @@ describe('ProfileComponent', () => {
       await openWithPosts(posts(7, 26));
 
       loadMoreButton()!.click();
-      expectPage('/posts/user/5', 20).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expectPage('/posts/user/5', after(7)).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
       await settle();
 
       expect(cards()).toHaveLength(20);
@@ -185,7 +189,7 @@ describe('ProfileComponent', () => {
       http().expectOne(`${API}/users/profile/alice`).flush(alice);
       await navigation;
       await settle();
-      expectPage('/posts/user/5', 0).flush(posts(7, 26));
+      expectPage('/posts/user/5').flush(pageOf(posts(7, 26)));
       await settle();
       late.flush({ ...me, postsCount: 19 }); // ...and arrives while Alice's profile is showing
       await settle();
@@ -216,7 +220,7 @@ describe('ProfileComponent', () => {
       http().expectNone((r) => r.url.endsWith('/replies'));
 
       tab('Replies').click();
-      expectPage('/posts/user/5/replies', 0).flush(replies(1, 2));
+      expectPage('/posts/user/5/replies').flush(pageOf(replies(1, 2)));
       await settle();
       expect(texts()).toEqual(['Reply #2', 'Reply #1']);
 
@@ -232,12 +236,12 @@ describe('ProfileComponent', () => {
     it('pages on its own, separately from the posts', async () => {
       await openWithPosts(posts(7, 26));
       tab('Replies').click();
-      expectPage('/posts/user/5/replies', 0).flush(replies(11, 30));
+      expectPage('/posts/user/5/replies').flush(pageOf(replies(11, 30), after(11)));
       await settle();
       expect(cards()).toHaveLength(20);
 
       loadMoreButton()!.click();
-      expectPage('/posts/user/5/replies', 20).flush(replies(1, 10));
+      expectPage('/posts/user/5/replies', after(11)).flush(pageOf(replies(1, 10)));
       await settle();
       expect(cards()).toHaveLength(30);
       expect(loadMoreButton()).toBeNull();
@@ -252,7 +256,7 @@ describe('ProfileComponent', () => {
       await openWithPosts(posts(1, 3));
 
       tab('Replies').click();
-      expectPage('/posts/user/5/replies', 0).flush([]);
+      expectPage('/posts/user/5/replies').flush(pageOf([]));
       await settle();
 
       expect(el().textContent).toContain("hasn't replied to anyone yet");
@@ -261,14 +265,14 @@ describe('ProfileComponent', () => {
     it('tries again the next time the tab is opened if the first load failed', async () => {
       await openWithPosts(posts(1, 3));
       tab('Replies').click();
-      expectPage('/posts/user/5/replies', 0).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expectPage('/posts/user/5/replies').flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
       await settle();
 
       tab('Posts').click();
       await settle();
       tab('Replies').click();
 
-      expectPage('/posts/user/5/replies', 0).flush(replies(1, 2));
+      expectPage('/posts/user/5/replies').flush(pageOf(replies(1, 2)));
       await settle();
       expect(cards()).toHaveLength(2);
     });
@@ -277,7 +281,7 @@ describe('ProfileComponent', () => {
   describe('going from one profile to another', () => {
     it('drops the posts still loading for the first one and shows the second one\'s', async () => {
       await open(alice);
-      const stale = expectPage('/posts/user/5', 0);
+      const stale = expectPage('/posts/user/5');
 
       const bob = makeUser({ id: 6, username: 'bob', displayName: 'Bob', email: '' });
       const navigation = harness.navigateByUrl('/profile/bob', ProfileComponent);
@@ -288,7 +292,7 @@ describe('ProfileComponent', () => {
       await navigation;
       await settle();
 
-      expectPage('/posts/user/6', 0).flush(posts(1, 2, bob));
+      expectPage('/posts/user/6').flush(pageOf(posts(1, 2, bob)));
       await settle();
       expect(el().querySelector('.header-titles h2')?.textContent?.trim()).toBe('Bob');
       expect(texts()).toEqual(['Post #2', 'Post #1']);
@@ -297,7 +301,7 @@ describe('ProfileComponent', () => {
     it('starts the new profile on its Posts tab with its own replies not yet loaded', async () => {
       await openWithPosts(posts(1, 2));
       tab('Replies').click();
-      expectPage('/posts/user/5/replies', 0).flush([]);
+      expectPage('/posts/user/5/replies').flush(pageOf([]));
       await settle();
 
       const bob = makeUser({ id: 6, username: 'bob', displayName: 'Bob', email: '' });
@@ -307,7 +311,7 @@ describe('ProfileComponent', () => {
       http().expectOne(`${API}/users/profile/bob`).flush(bob);
       await navigation;
       await settle();
-      expectPage('/posts/user/6', 0).flush(posts(1, 1, bob));
+      expectPage('/posts/user/6').flush(pageOf(posts(1, 1, bob)));
       await settle();
 
       expect(tab('Posts').classList).toContain('active');
@@ -315,7 +319,7 @@ describe('ProfileComponent', () => {
 
       // Bob's replies are loaded when asked for (not skipped because Alice's were), and Alice's are gone
       tab('Replies').click();
-      expectPage('/posts/user/6/replies', 0).flush([makePost(50, { user: bob, userId: bob.id, content: 'Bob replies', parentPostId: 9 })]);
+      expectPage('/posts/user/6/replies').flush(pageOf([makePost(50, { user: bob, userId: bob.id, content: 'Bob replies', parentPostId: 9 })]));
       await settle();
       expect(texts()).toEqual(['Bob replies']);
     });

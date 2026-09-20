@@ -434,8 +434,8 @@ export class ProfileComponent implements OnInit {
 
   // Profile State
   profile = signal<User | null>(null);
-  readonly postList = new PagedList<Post>((skip, take) => this.api.getUserPosts(this.profile()!.id, skip, take), postEntryKey);
-  readonly replyList = new PagedList<Post>((skip, take) => this.api.getUserReplies(this.profile()!.id, skip, take), (p) => String(p.id));
+  readonly postList = new PagedList<Post>((cursor, take) => this.api.getUserPosts(this.profile()!.id, cursor, take), postEntryKey);
+  readonly replyList = new PagedList<Post>((cursor, take) => this.api.getUserReplies(this.profile()!.id, cursor, take), (p) => String(p.id));
   readonly entryKey = postEntryKey;
   isOwnProfile = computed(() => this.profile()?.id === this.currentUser()?.id);
   postsLabel = computed(() => {

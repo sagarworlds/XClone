@@ -60,7 +60,7 @@ import { WidgetsComponent } from './widgets';
 export class FeedComponent implements OnInit {
   private readonly api = inject(ApiService);
 
-  readonly feed = new PagedList<Post>((skip, take) => this.api.getFeed(skip, take), postEntryKey);
+  readonly feed = new PagedList<Post>((cursor, take) => this.api.getFeed(cursor, take), postEntryKey);
   readonly entryKey = postEntryKey;
 
   readonly createPost = (content: string) => this.api.createPost(content);

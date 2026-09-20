@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
-import { User, Post, AuthResponse, AppNotification } from '../models/types';
+import { User, Post, AuthResponse, AppNotification, Page } from '../models/types';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
@@ -77,28 +77,30 @@ export class ApiService {
   }
 
   // Posts Methods
-  getFeed(skip = 0, take = 10): Observable<Post[]> {
-    const params = new HttpParams().set('skip', skip).set('take', take);
-    return this.http.get<Post[]>(`${this.baseUrl}/posts/feed`, { params });
+  // The lists below are read a page at a time: pass the previous page's nextCursor (null for the first page)
+  private pageParams(cursor: string | null, take: number): HttpParams {
+    const params = new HttpParams().set('take', take);
+    return cursor ? params.set('cursor', cursor) : params;
   }
 
-  getUserPosts(userId: number, skip = 0, take = 10): Observable<Post[]> {
-    const params = new HttpParams().set('skip', skip).set('take', take);
-    return this.http.get<Post[]>(`${this.baseUrl}/posts/user/${userId}`, { params });
+  getFeed(cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/feed`, { params: this.pageParams(cursor, take) });
+  }
+
+  getUserPosts(userId: number, cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/user/${userId}`, { params: this.pageParams(cursor, take) });
   }
 
   getPost(id: number): Observable<Post> {
     return this.http.get<Post>(`${this.baseUrl}/posts/${id}`);
   }
 
-  getReplies(postId: number, skip = 0, take = 40): Observable<Post[]> {
-    const params = new HttpParams().set('skip', skip).set('take', take);
-    return this.http.get<Post[]>(`${this.baseUrl}/posts/${postId}/replies`, { params });
+  getReplies(postId: number, cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/${postId}/replies`, { params: this.pageParams(cursor, take) });
   }
 
-  getUserReplies(userId: number, skip = 0, take = 40): Observable<Post[]> {
-    const params = new HttpParams().set('skip', skip).set('take', take);
-    return this.http.get<Post[]>(`${this.baseUrl}/posts/user/${userId}/replies`, { params });
+  getUserReplies(userId: number, cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/user/${userId}/replies`, { params: this.pageParams(cursor, take) });
   }
 
   createReply(postId: number, content: string): Observable<Post> {
@@ -176,9 +178,8 @@ export class ApiService {
   }
 
   // Notifications
-  getNotifications(skip = 0, take = 20): Observable<AppNotification[]> {
-    const params = new HttpParams().set('skip', skip).set('take', take);
-    return this.http.get<AppNotification[]>(`${this.baseUrl}/notifications`, { params });
+  getNotifications(cursor: string | null = null, take = 20): Observable<Page<AppNotification>> {
+    return this.http.get<Page<AppNotification>>(`${this.baseUrl}/notifications`, { params: this.pageParams(cursor, take) });
   }
 
   getUnreadNotificationCount(): Observable<{ count: number }> {

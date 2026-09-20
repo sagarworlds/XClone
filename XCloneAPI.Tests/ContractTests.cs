@@ -17,7 +17,7 @@ public partial class ContractTests(ApiFixture api)
     [GeneratedRegex(@"\.(?<method>get|post|put|delete)<[^`(]*?>\(\s*`(?<url>[^`]+)`", RegexOptions.IgnoreCase)]
     private static partial Regex HttpCall();
 
-    [GeneratedRegex(@"export interface (?<name>\w+) \{(?<body>.*?)\n\}", RegexOptions.Singleline)]
+    [GeneratedRegex(@"export interface (?<name>\w+)(<[^>]*>)? \{(?<body>.*?)\n\}", RegexOptions.Singleline)]
     private static partial Regex TypeScriptInterface();
 
     [GeneratedRegex(@"^\s*(?<prop>\w+)\??:", RegexOptions.Multiline)]
@@ -120,11 +120,13 @@ public partial class ContractTests(ApiFixture api)
 
         var feed = JsonDocument.Parse(await (await author.GetAsync("/api/posts/feed")).Content.ReadAsStringAsync());
         var replies = JsonDocument.Parse(await (await author.GetAsync($"/api/posts/{post.Id}/replies")).Content.ReadAsStringAsync());
+        var feedItems = feed.RootElement.GetProperty("items");
+        var replyItems = replies.RootElement.GetProperty("items");
 
         var postProperties = FrontendTypeProperties("Post");
         var userProperties = FrontendTypeProperties("User");
 
-        foreach (var entry in feed.RootElement.EnumerateArray().Concat(replies.RootElement.EnumerateArray()))
+        foreach (var entry in feedItems.EnumerateArray().Concat(replyItems.EnumerateArray()))
         {
             Assert.Empty(postProperties.Except(JsonKeys(entry)));
             Assert.Empty(userProperties.Except(JsonKeys(entry.GetProperty("user"))));
@@ -133,7 +135,7 @@ public partial class ContractTests(ApiFixture api)
                 Assert.Empty(userProperties.Except(JsonKeys(entry.GetProperty("retweetedBy"))));
         }
 
-        Assert.Contains(feed.RootElement.EnumerateArray(), e => e.GetProperty("retweetedBy").ValueKind == JsonValueKind.Object);
+        Assert.Contains(feedItems.EnumerateArray(), e => e.GetProperty("retweetedBy").ValueKind == JsonValueKind.Object);
     }
 
     [FactWithFrontend]
@@ -149,16 +151,46 @@ public partial class ContractTests(ApiFixture api)
         var notificationProperties = FrontendTypeProperties("AppNotification");
         var userProperties = FrontendTypeProperties("User");
 
-        Assert.Equal(2, json.RootElement.GetArrayLength());
-        foreach (var entry in json.RootElement.EnumerateArray())
+        var items = json.RootElement.GetProperty("items");
+        Assert.Equal(2, items.GetArrayLength());
+        foreach (var entry in items.EnumerateArray())
         {
             Assert.Empty(notificationProperties.Except(JsonKeys(entry)));
             Assert.Empty(userProperties.Except(JsonKeys(entry.GetProperty("actor"))));
         }
 
         // The literal values the Angular component branches on
-        Assert.Equal(new[] { "reply", "repost" }, json.RootElement.EnumerateArray().Select(e => e.GetProperty("type").GetString()).Order());
+        Assert.Equal(new[] { "reply", "repost" }, items.EnumerateArray().Select(e => e.GetProperty("type").GetString()).Order());
         Assert.Contains("'reply' | 'repost'", Frontend.Read("models/types.ts"));
+    }
+
+    [FactWithFrontend]
+    public async Task EveryPagedListHasTheShapeTheFrontendsPageTypeDeclares()
+    {
+        var alice = await api.RegisterAsync("alice");
+        var bob = await api.RegisterAsync("bob");
+        var post = await alice.CreatePostAsync("one");
+        await alice.CreatePostAsync("two");
+        await bob.ReplyAsync(post.Id, "a reply");
+        var pageProperties = FrontendTypeProperties("Page");
+
+        var paths = new[]
+        {
+            "/api/posts/feed?take=1", $"/api/posts/user/{alice.Id}?take=1", $"/api/posts/{post.Id}/replies?take=1",
+            $"/api/posts/user/{bob.Id}/replies?take=1", "/api/notifications?take=1",
+        };
+        foreach (var path in paths)
+        {
+            using var json = JsonDocument.Parse(await (await alice.GetAsync(path)).Content.ReadAsStringAsync());
+            Assert.Empty(pageProperties.Except(JsonKeys(json.RootElement)));
+            Assert.Equal(JsonValueKind.Array, json.RootElement.GetProperty("items").ValueKind);
+        }
+
+        // ...and the cursor really is a string while there is more, and null at the end
+        using var first = JsonDocument.Parse(await (await alice.GetAsync("/api/posts/feed?take=1")).Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.String, first.RootElement.GetProperty("nextCursor").ValueKind);
+        using var all = JsonDocument.Parse(await (await alice.GetAsync("/api/posts/feed?take=50")).Content.ReadAsStringAsync());
+        Assert.Equal(JsonValueKind.Null, all.RootElement.GetProperty("nextCursor").ValueKind);
     }
 
     // ---- CORS -----------------------------------------------------------------------------------------------
