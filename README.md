@@ -187,7 +187,7 @@ npm test
 
 ### Continuous integration
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `master` and every pull request:
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `master` and to `feature/**`, `fix/**`, `test/**`, `chore/**` and `docs/**` branches, and on every pull request, so a branch is tested before it is merged:
 
 - **API integration tests:** `dotnet test` in Release mode against a throwaway `postgres:17` service container (via `XCLONE_TEST_CONNECTION`). The `.trx` results are uploaded as a build artifact.
 - **Frontend tests and build:** `npm ci`, the unit tests, `npm run build`, and `npm audit --omit=dev --audit-level=high`, so a broken lockfile, a failing test, a build error or a new high-severity advisory in a runtime dependency fails the check.
