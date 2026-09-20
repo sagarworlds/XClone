@@ -14,6 +14,7 @@ namespace XCloneAPI.Data
         public DbSet<Like> Likes { get; set; }
         public DbSet<Retweet> Retweets { get; set; }
         public DbSet<Follow> Follows { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -109,6 +110,41 @@ namespace XCloneAPI.Data
 
             modelBuilder.Entity<Follow>()
                 .HasIndex(f => f.FollowerId);
+
+            // Notification Configuration
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.Recipient)
+                .WithMany()
+                .HasForeignKey(n => n.RecipientId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.Actor)
+                .WithMany()
+                .HasForeignKey(n => n.ActorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Deleting a post (or a reply) takes the notifications about it along
+            modelBuilder.Entity<Notification>()
+                .HasOne(n => n.Post)
+                .WithMany()
+                .HasForeignKey(n => n.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Notification>()
+                .Property(n => n.Type)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
+            // "Unread count" and "newest first" are both per recipient
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => new { n.RecipientId, n.IsRead });
+
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => new { n.RecipientId, n.CreatedAt });
+
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => n.PostId);
         }
     }
 }

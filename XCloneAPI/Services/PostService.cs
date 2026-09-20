@@ -78,6 +78,20 @@ namespace XCloneAPI.Services
 
                 parent.RepliesCount++;
                 _context.Posts.Add(reply);
+
+                // Tell the author of the post being replied to (not when replying to yourself). The notification
+                // points at the reply, and is saved together with it.
+                if (parent.UserId != userId)
+                {
+                    _context.Notifications.Add(new Notification
+                    {
+                        RecipientId = parent.UserId,
+                        ActorId = userId,
+                        Type = NotificationType.Reply,
+                        Post = reply
+                    });
+                }
+
                 await _context.SaveChangesAsync();
 
                 var user = await _context.Users.FindAsync(userId);

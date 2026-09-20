@@ -23,6 +23,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Load more**: The home timeline, profile tabs and reply threads load 20 entries at a time with a "Load more" button. It stays correct while you post or delete in between (no duplicates, nothing skipped), and a failed page can be retried without losing what is already on screen.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
+- **Notifications**: You are told when someone replies to or reposts one of your posts (never for your own actions). The sidebar shows an unread badge that refreshes every 30 seconds, and the Notifications page lists everything newest first, highlights what is new, and marks it all as read when you open it. Undoing a repost, or deleting the reply or the post, takes its notification back.
 - **User Profiles**: Custom banners, avatars, display names, follower/following counts, join dates, and an interactive edit-profile modal.
 - **Social Graph**: Follow and unfollow capabilities that seamlessly update timelines and recommendation widgets.
 - **User Search & Recommendations**: Dynamic real-time user search and a "Who to follow" suggestion widget.
@@ -35,10 +36,10 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 ```
 XClone/
 ├── XCloneAPI/                # ASP.NET Core 10.0 Web API (Backend)
-│   ├── Controllers/          # API endpoints (Auth, Posts, Likes, Retweets, Follows, Users)
+│   ├── Controllers/          # API endpoints (Auth, Posts, Likes, Retweets, Follows, Users, Notifications)
 │   ├── Data/                 # AppDbContext configuration
 │   ├── DTOs/                 # Request/Response Data Transfer Objects
-│   ├── Models/               # Entity Framework database schemas (User, Post, Like, Retweet, Follow)
+│   ├── Models/               # Entity Framework database schemas (User, Post, Like, Retweet, Follow, Notification)
 │   └── Services/             # Domain logic (IAuthService, IPostService, etc.)
 │
 ├── XCloneAPI.Tests/          # API integration tests (xUnit, real PostgreSQL)
@@ -46,10 +47,11 @@ XClone/
 └── x-clone-frontend/         # Angular 21 Single Page Application (Frontend)
     ├── src/
     │   ├── app/
-    │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets, LoadMore)
+    │   │   ├── components/   # Standalone UI (Login, Register, Feed, Profile, PostDetail + shared PostCard, Composer, Sidebar, Widgets, LoadMore, Notifications)
     │   │   ├── models/       # TypeScript Interfaces
-    │   │   ├── services/     # Global ApiService with Signals state management, PagedList (skip/take paging state)
+    │   │   ├── services/     # ApiService (signals state), PagedList (skip/take paging), NotificationsService (unread badge polling)
     │   │   └── app.routes.ts # SPA routing with functional auth guards
+    │   │   (each *.spec.ts sits next to the code it tests; shared test helpers are in src/testing/)
     │   ├── environments/     # Environment-specific API configuration
     │   └── styles.css        # Global CSS dark theme styles
     └── angular.json          # Angular workspace settings
@@ -66,6 +68,7 @@ XClone/
 
 ### Frontend
 - **Framework**: Angular 21 (standalone components, signals, zoneless change detection)
+- **Testing**: Vitest + jsdom through Angular's `ng test`
 - **Styling**: Vanilla CSS (Custom variables, transitions, and layout grids)
 - **Icons**: Google Material Symbols Outlined
 - **Typography**: Inter Font family
@@ -150,15 +153,28 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, timelines and paging, privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows, notifications, timelines and paging, privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
+
+### Frontend tests
+
+```bash
+cd x-clone-frontend
+npm test
+```
+
+`npm test` runs in watch mode; add `-- --watch=false` for a single run (what CI does). No API or database is needed: components run in jsdom against Angular's fake HTTP backend, so every request a page makes is checked (URL, method, paging parameters) and answered by the test.
+
+- **Paging:** `PagedList` (offsets after posting or deleting between pages, duplicates, cancelling, retry) and the Load more button, plus the feed, profile tabs and reply threads that use them.
+- **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
+- **Foundations:** `ApiService` requests and session handling, and the time formatter.
 
 ### Continuous integration
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push to `master` and every pull request:
 
 - **API integration tests:** `dotnet test` in Release mode against a throwaway `postgres:17` service container (via `XCLONE_TEST_CONNECTION`). The `.trx` results are uploaded as a build artifact.
-- **Frontend build:** `npm ci`, `npm run build`, and `npm audit --omit=dev --audit-level=high`, so a broken lockfile, a build error or a new high-severity advisory in a runtime dependency fails the check.
+- **Frontend tests and build:** `npm ci`, the unit tests, `npm run build`, and `npm audit --omit=dev --audit-level=high`, so a broken lockfile, a failing test, a build error or a new high-severity advisory in a runtime dependency fails the check.
 
 ---
 

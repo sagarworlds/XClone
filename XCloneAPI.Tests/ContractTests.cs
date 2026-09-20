@@ -136,6 +136,31 @@ public partial class ContractTests(ApiFixture api)
         Assert.Contains(feed.RootElement.EnumerateArray(), e => e.GetProperty("retweetedBy").ValueKind == JsonValueKind.Object);
     }
 
+    [FactWithFrontend]
+    public async Task NotificationResponse_HasEveryFieldTheFrontendTypeDeclares_IncludingTheActor()
+    {
+        var alice = await api.RegisterAsync("alice");
+        var bob = await api.RegisterAsync("bob");
+        var post = await alice.CreatePostAsync("shape check");
+        await bob.ReplyAsync(post.Id, "a reply");
+        await bob.ToggleRetweetAsync(post.Id);
+
+        using var json = JsonDocument.Parse(await (await alice.GetAsync("/api/notifications")).Content.ReadAsStringAsync());
+        var notificationProperties = FrontendTypeProperties("AppNotification");
+        var userProperties = FrontendTypeProperties("User");
+
+        Assert.Equal(2, json.RootElement.GetArrayLength());
+        foreach (var entry in json.RootElement.EnumerateArray())
+        {
+            Assert.Empty(notificationProperties.Except(JsonKeys(entry)));
+            Assert.Empty(userProperties.Except(JsonKeys(entry.GetProperty("actor"))));
+        }
+
+        // The literal values the Angular component branches on
+        Assert.Equal(new[] { "reply", "repost" }, json.RootElement.EnumerateArray().Select(e => e.GetProperty("type").GetString()).Order());
+        Assert.Contains("'reply' | 'repost'", Frontend.Read("models/types.ts"));
+    }
+
     // ---- CORS -----------------------------------------------------------------------------------------------
 
     [Theory]

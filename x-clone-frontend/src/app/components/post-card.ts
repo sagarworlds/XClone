@@ -2,6 +2,7 @@ import { Component, computed, inject, input, linkedSignal, output } from '@angul
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
 import { Post } from '../models/types';
+import { formatTime } from '../utils/format-time';
 
 /**
  * Identifies an entry of a timeline. The same post can appear twice (the original and someone's repost of it),
@@ -288,17 +289,5 @@ export class PostCardComponent {
     this.api.deletePost(id).subscribe({ next: () => this.deleted.emit(id) });
   }
 
-  formatTime(dateStr: string): string {
-    try {
-      const diffMins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-      const diffHours = Math.floor(diffMins / 60);
-
-      if (diffMins < 1) return 'Just now';
-      if (diffMins < 60) return `${diffMins}m`;
-      if (diffHours < 24) return `${diffHours}h`;
-      return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    } catch {
-      return '';
-    }
-  }
+  readonly formatTime = formatTime;
 }

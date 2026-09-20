@@ -40,3 +40,14 @@ export interface AuthResponse {
   token: string;
   expiresAt: string;
 }
+
+export interface AppNotification {
+  id: number;
+  // "reply": someone replied to your post (postId is the reply); "repost": someone reposted it (postId is your post)
+  type: 'reply' | 'repost';
+  actor: User;
+  postId: number;
+  postContent: string;
+  isRead: boolean;
+  createdAt: string;
+}

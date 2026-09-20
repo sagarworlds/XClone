@@ -31,11 +31,29 @@ namespace XCloneAPI.Services
                     _context.Retweets.Remove(existing);
                     if (post.RetweetsCount > 0)
                         post.RetweetsCount--;
+
+                    // Undoing a repost takes back the notification about it
+                    var notifications = await _context.Notifications
+                        .Where(n => n.Type == NotificationType.Repost && n.ActorId == userId && n.PostId == postId)
+                        .ToListAsync();
+                    _context.Notifications.RemoveRange(notifications);
                 }
                 else
                 {
                     _context.Retweets.Add(new Retweet { UserId = userId, PostId = postId });
                     post.RetweetsCount++;
+
+                    // Tell the author (not when reposting your own post)
+                    if (post.UserId != userId)
+                    {
+                        _context.Notifications.Add(new Notification
+                        {
+                            RecipientId = post.UserId,
+                            ActorId = userId,
+                            Type = NotificationType.Repost,
+                            PostId = postId
+                        });
+                    }
                 }
 
                 await _context.SaveChangesAsync();

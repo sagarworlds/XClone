@@ -1,0 +1,204 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { API, answerBackgroundRequests, expectPage, http, makePost, makeUser, provideAppTesting, range, signInAs } from '../../testing/helpers';
+import { Post } from '../models/types';
+import { FeedComponent } from './feed';
+
+describe('FeedComponent', () => {
+  const me = makeUser({ id: 1, username: 'me', displayName: 'Me' });
+  let fixture: ComponentFixture<FeedComponent>;
+
+  const el = () => fixture.nativeElement as HTMLElement;
+  const cards = () => [...el().querySelectorAll<HTMLElement>('.post-card')];
+  const texts = () => cards().map((c) => c.querySelector('.post-text-content')?.textContent?.trim());
+  const loadMoreButton = () => el().querySelector<HTMLButtonElement>('.load-more-btn');
+  const settle = () => fixture.whenStable();
+
+  /** Newest first, like the API: ids from `to` down to `from`. */
+  const posts = (from: number, to: number, overrides: Partial<Post> = {}) =>
+    range(from, to).reverse().map((id) => makePost(id, overrides));
+
+  async function open(firstPage: Post[]) {
+    fixture = TestBed.createComponent(FeedComponent);
+    fixture.detectChanges();
+    await settle();
+    answerBackgroundRequests();
+    expectPage('/posts/feed', 0).flush(firstPage);
+    await settle();
+  }
+
+  async function clickLoadMore(expectedSkip: number, answer: Post[]) {
+    loadMoreButton()!.click();
+    expectPage('/posts/feed', expectedSkip).flush(answer);
+    await settle();
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    signInAs(me);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    TestBed.configureTestingModule({ imports: [FeedComponent], providers: provideAppTesting() });
+  });
+
+  afterEach(() => {
+    http().verify();
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
+
+  it('shows the first 20 posts and a Load more button', async () => {
+    await open(posts(26, 45));
+
+    expect(cards()).toHaveLength(20);
+    expect(texts()[0]).toBe('Post #45');
+    expect(loadMoreButton()?.textContent?.trim()).toBe('Load more');
+  });
+
+  it('appends the next page, and the button goes away after the last one', async () => {
+    await open(posts(26, 45));
+
+    await clickLoadMore(20, posts(6, 25));
+    expect(cards()).toHaveLength(40);
+    expect(loadMoreButton()).not.toBeNull();
+
+    await clickLoadMore(40, posts(1, 5));
+    expect(cards()).toHaveLength(45);
+    expect(texts().at(-1)).toBe('Post #1');
+    expect(loadMoreButton()).toBeNull();
+  });
+
+  it('has no button when everything fits on the first page', async () => {
+    await open(posts(1, 7));
+
+    expect(cards()).toHaveLength(7);
+    expect(loadMoreButton()).toBeNull();
+  });
+
+  it('shows a post twice when it is there both as the original and as someone\'s repost', async () => {
+    const bob = makeUser({ id: 3, username: 'bob', displayName: 'Bob' });
+    const warn = vi.spyOn(console, 'warn');
+    const error = vi.spyOn(console, 'error');
+
+    await open([makePost(30, { retweetedBy: bob }), makePost(30), makePost(29)]);
+
+    expect(cards()).toHaveLength(3);
+    expect(cards()[0].textContent).toContain('Bob reposted');
+    expect(cards()[1].textContent).not.toContain('reposted');
+    expect(warn).not.toHaveBeenCalled(); // Angular warns about duplicate @for keys
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('welcomes a new user whose timeline is empty', async () => {
+    await open([]);
+
+    expect(cards()).toHaveLength(0);
+    expect(el().textContent).toContain('Welcome to X!');
+  });
+
+  describe('while you use the page in between', () => {
+    it('puts a new post on top and asks for the next page one entry later, so nothing repeats', async () => {
+      await open(posts(26, 45));
+      const textarea = el().querySelector('textarea')!;
+      textarea.value = 'Brand new';
+      textarea.dispatchEvent(new Event('input'));
+      await settle();
+
+      el().querySelector<HTMLButtonElement>('.publish-btn')!.click();
+      const create = http().expectOne((r) => r.method === 'POST' && r.url === `${API}/posts`);
+      expect(create.request.body).toMatchObject({ content: 'Brand new' });
+      create.flush(makePost(99, { user: me, userId: me.id, content: 'Brand new' }));
+      await settle();
+      expect(texts()[0]).toBe('Brand new');
+      expect(cards()).toHaveLength(21);
+
+      await clickLoadMore(21, posts(6, 25));
+      expect(texts()).toEqual(['Brand new', ...posts(6, 45).map((p) => p.content)]);
+    });
+
+    it('asks one entry earlier after you delete a post', async () => {
+      await open([makePost(45, { user: me, userId: me.id }), ...posts(26, 44)]);
+
+      el().querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
+      http().expectOne(`${API}/posts/45`).flush(null, { status: 204, statusText: 'No Content' });
+      await settle();
+      expect(cards()).toHaveLength(19);
+      expect(texts()).not.toContain('Post #45');
+
+      await clickLoadMore(19, posts(6, 25));
+      expect(cards()).toHaveLength(39);
+    });
+
+    it('removes every entry of a post you delete, the reposts of it included', async () => {
+      const bob = makeUser({ id: 3, username: 'bob', displayName: 'Bob' });
+      await open([
+        makePost(45, { user: me, userId: me.id, retweetedBy: bob }),
+        makePost(45, { user: me, userId: me.id }),
+        ...posts(27, 44),
+      ]);
+      expect(cards()).toHaveLength(20);
+
+      cards()[1].querySelector<HTMLButtonElement>('.delete-post-btn')!.click();
+      http().expectOne(`${API}/posts/45`).flush(null, { status: 204, statusText: 'No Content' });
+      await settle();
+
+      expect(cards()).toHaveLength(18);
+      expect(texts()).not.toContain('Post #45');
+      await clickLoadMore(18, posts(6, 25)); // both entries are gone from the server's list too
+    });
+
+    it('takes your own repost out of the list when you undo it, and stays in step for the next page', async () => {
+      const someoneElses = makePost(30, { retweetedBy: me, isRetweeted: true });
+      await open([...posts(31, 45), someoneElses, ...posts(26, 29)]);
+      expect(cards()).toHaveLength(20);
+
+      const entry = cards()[15];
+      expect(entry.textContent).toContain('You reposted');
+      entry.querySelector<HTMLButtonElement>('.retweet-btn')!.click();
+      http().expectOne(`${API}/retweets/toggle/30`).flush({ retweeted: false });
+      await settle();
+
+      expect(cards()).toHaveLength(19);
+      expect(el().textContent).not.toContain('You reposted');
+      await clickLoadMore(19, posts(6, 25));
+    });
+
+    it('keeps the entry when someone else undoes their repost of it', async () => {
+      const bob = makeUser({ id: 3, username: 'bob', displayName: 'Bob' });
+      await open([makePost(30, { retweetedBy: bob, isRetweeted: true }), ...posts(31, 45)]);
+
+      cards()[0].querySelector<HTMLButtonElement>('.retweet-btn')!.click();
+      http().expectOne(`${API}/retweets/toggle/30`).flush({ retweeted: false });
+      await settle();
+
+      expect(cards()).toHaveLength(16);
+    });
+
+    it('does not move the list when you like a post', async () => {
+      await open(posts(26, 45));
+
+      cards()[3].querySelector<HTMLButtonElement>('.like-btn')!.click();
+      http().expectOne(`${API}/likes/toggle/42`).flush({ liked: true });
+      await settle();
+
+      expect(cards()).toHaveLength(20);
+      await clickLoadMore(20, posts(6, 25));
+    });
+  });
+
+  describe('when loading more goes wrong', () => {
+    it('keeps the posts, explains, and lets you try again', async () => {
+      await open(posts(26, 45));
+
+      loadMoreButton()!.click();
+      expectPage('/posts/feed', 20).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      await settle();
+
+      expect(cards()).toHaveLength(20);
+      expect(el().textContent).toContain("Couldn't load more");
+      expect(loadMoreButton()?.textContent?.trim()).toBe('Try again');
+
+      await clickLoadMore(20, posts(6, 25));
+      expect(cards()).toHaveLength(40);
+      expect(el().textContent).not.toContain("Couldn't load more");
+    });
+  });
+});

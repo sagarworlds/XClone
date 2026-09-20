@@ -1,6 +1,7 @@
 import { Component, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
+import { NotificationsService } from '../services/notifications.service';
 
 /** Left navigation column shared by every page. Layout styles live in the global stylesheet. */
 @Component({
@@ -8,7 +9,30 @@ import { ApiService } from '../services/api.service';
   standalone: true,
   imports: [RouterLink],
   // The host must not create its own box, so the <aside> stays a direct flex child of .app-container.
-  styles: [`:host { display: contents; }`],
+  styles: [`
+    :host { display: contents; }
+    .icon-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+    .badge {
+      position: absolute;
+      top: -6px;
+      right: -8px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 5px;
+      border: 2px solid var(--bg-primary);
+      border-radius: 9999px;
+      background-color: var(--accent-color);
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      line-height: 14px;
+      text-align: center;
+      box-sizing: content-box;
+    }
+  `],
   template: `
     <aside class="sidebar">
       <div>
@@ -22,6 +46,15 @@ import { ApiService } from '../services/api.service';
           <a routerLink="/home" class="nav-item" [class.active]="active() === 'home'">
             <span class="material-symbols-outlined">home</span>
             <span>Home</span>
+          </a>
+          <a routerLink="/notifications" class="nav-item" [class.active]="active() === 'notifications'">
+            <span class="icon-wrap">
+              <span class="material-symbols-outlined">notifications</span>
+              @if (unreadCount() > 0) {
+                <span class="badge" [attr.aria-label]="unreadCount() + ' unread'">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
+              }
+            </span>
+            <span>Notifications</span>
           </a>
           @if (currentUser()) {
             <a [routerLink]="['/profile', currentUser()?.username]" class="nav-item" [class.active]="active() === 'profile'">
@@ -52,8 +85,10 @@ export class SidebarComponent {
   protected readonly api = inject(ApiService);
 
   /** Which nav item to highlight. */
-  readonly active = input<'home' | 'profile' | null>(null);
+  readonly active = input<'home' | 'notifications' | 'profile' | null>(null);
 
   readonly currentUser = this.api.currentUser;
+  // Injecting the service is also what starts it polling for new notifications
+  readonly unreadCount = inject(NotificationsService).unreadCount;
   readonly defaultAvatar = 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png';
 }

@@ -28,6 +28,9 @@ public class SecurityTests(ApiFixture api)
     [InlineData("GET", "/api/users/profile/someone")]
     [InlineData("GET", "/api/users/suggestions")]
     [InlineData("PUT", "/api/users/profile")]
+    [InlineData("GET", "/api/notifications")]
+    [InlineData("GET", "/api/notifications/unread-count")]
+    [InlineData("POST", "/api/notifications/read-all")]
     public async Task EndpointsThatActOnBehalfOfAUser_RequireLogin(string method, string path)
     {
         var response = await api.Anonymous.SendAsync(Request(method, path));

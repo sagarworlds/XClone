@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
-import { User, Post, AuthResponse } from '../models/types';
+import { User, Post, AuthResponse, AppNotification } from '../models/types';
 import { Router } from '@angular/router';
 import { environment } from '../../environments/environment';
 
@@ -172,6 +172,20 @@ export class ApiService {
         this.currentUser.set(user);
       }),
     );
+  }
+
+  // Notifications
+  getNotifications(skip = 0, take = 20): Observable<AppNotification[]> {
+    const params = new HttpParams().set('skip', skip).set('take', take);
+    return this.http.get<AppNotification[]>(`${this.baseUrl}/notifications`, { params });
+  }
+
+  getUnreadNotificationCount(): Observable<{ count: number }> {
+    return this.http.get<{ count: number }>(`${this.baseUrl}/notifications/unread-count`);
+  }
+
+  markNotificationsRead(): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/notifications/read-all`, {});
   }
 
   getSuggestions(take = 4): Observable<User[]> {

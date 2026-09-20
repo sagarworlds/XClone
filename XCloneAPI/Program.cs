@@ -98,6 +98,7 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ILikeService, LikeService>();
 builder.Services.AddScoped<IRetweetService, RetweetService>();
 builder.Services.AddScoped<IFollowService, FollowService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // 8. Swagger/OpenAPI
 builder.Services.AddEndpointsApiExplorer();

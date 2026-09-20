@@ -105,6 +105,15 @@ public sealed class TestUser
 
     public Task<List<PostResponse>> FeedAsync(int skip = 0, int take = 50) =>
         GetAsync<List<PostResponse>>($"/api/posts/feed?skip={skip}&take={take}");
+
+    public Task<List<NotificationResponse>> NotificationsAsync(int skip = 0, int take = 50) =>
+        GetAsync<List<NotificationResponse>>($"/api/notifications?skip={skip}&take={take}");
+
+    public async Task<int> UnreadCountAsync() =>
+        (await GetAsync<Dictionary<string, int>>("/api/notifications/unread-count"))["count"];
+
+    public async Task MarkNotificationsReadAsync() =>
+        await (await PostAsync("/api/notifications/read-all")).ShouldBeAsync(HttpStatusCode.NoContent);
 }
 
 public static class HttpResponseExtensions
