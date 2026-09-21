@@ -1,12 +1,18 @@
 import examples from '../../testing/text-entities.json';
-import { hashtagsOf, isValidHashtag, MAX_TAGS, tokenize } from './text-entities';
+import { hashtagsOf, isValidHashtag, MAX_MENTIONS, MAX_TAGS, mentionsOf, tokenize } from './text-entities';
 
 interface Example {
   text: string;
   tags: string[];
 }
 
+interface MentionExample {
+  text: string;
+  names: string[];
+}
+
 const hashtagExamples = examples.hashtags as Example[];
+const mentionExamples = examples.mentions as MentionExample[];
 
 describe('hashtagsOf', () => {
   it('has the shared examples to check against', () => {
@@ -119,5 +125,113 @@ describe('tokenize', () => {
 
     expect(pieces.map((p) => p.text).join('')).toBe('<script>alert(1)</script> #tag <b>bold</b>');
     expect(pieces.filter((p) => p.kind === 'hashtag')).toEqual([{ kind: 'hashtag', text: '#tag', tag: 'tag' }]);
+  });
+});
+
+describe('mentionsOf', () => {
+  it('has the shared examples to check against', () => {
+    expect(mentionExamples.length).toBeGreaterThanOrEqual(40);
+  });
+
+  // The server's MentionParser is tested against the very same file, so the two always agree
+  it.each(mentionExamples.map((e) => [JSON.stringify(e.text), e] as const))('finds the names in %s', (_label, example) => {
+    expect(mentionsOf(example.text)).toEqual(example.names);
+  });
+
+  it('takes a name of fifty characters and no mention at all of fifty-one', () => {
+    const fifty = 'a'.repeat(50);
+
+    expect(mentionsOf(`@${fifty}`)).toEqual([fifty]);
+    expect(mentionsOf(`@${fifty}a`)).toEqual([]);
+  });
+
+  it('counts only the first ten different names', () => {
+    const text = Array.from({ length: 12 }, (_, i) => `@user${String(i + 1).padStart(2, '0')}`).join(' ');
+
+    expect(mentionsOf(text)).toEqual(Array.from({ length: 10 }, (_, i) => `user${String(i + 1).padStart(2, '0')}`));
+    expect(mentionsOf(text)).toHaveLength(MAX_MENTIONS);
+  });
+
+  it('does not let repeats in any case use up the ten', () => {
+    const text = Array.from({ length: 30 }, (_, i) => `@Same @SAME @other${(i % 9) + 1}`).join(' ');
+
+    const names = mentionsOf(text);
+
+    expect(names).toHaveLength(10);
+    expect(names[0]).toBe('Same'); // as first written
+    expect(new Set(names.map((n) => n.toLowerCase())).size).toBe(10);
+  });
+
+  it('keeps a name as first written, not lower-cased', () => {
+    expect(mentionsOf('@BoB_Smith @bob_smith')).toEqual(['BoB_Smith']);
+  });
+});
+
+describe('tokenize with mentions', () => {
+  const linked = (text: string, accounts: string[]) =>
+    tokenize(text, accounts).flatMap((s) => (s.kind === 'mention' ? [s.username] : []));
+
+  // Nothing may be lost or added, whatever accounts exist
+  it.each(mentionExamples.map((e) => [JSON.stringify(e.text), e] as const))('keeps every character of %s', (_label, example) => {
+    expect(tokenize(example.text, example.names).map((s) => s.text).join('')).toBe(example.text);
+    expect(tokenize(example.text).map((s) => s.text).join('')).toBe(example.text);
+  });
+
+  it.each(mentionExamples.map((e) => [JSON.stringify(e.text), e] as const))('links exactly the names of %s when they are all accounts', (_label, example) => {
+    expect(new Set(linked(example.text, example.names).map((n) => n.toLowerCase()))).toEqual(new Set(example.names.map((n) => n.toLowerCase())));
+  });
+
+  it.each(mentionExamples.map((e) => [JSON.stringify(e.text), e] as const))('links nothing in %s when none of them is an account', (_label, example) => {
+    expect(linked(example.text, [])).toEqual([]);
+  });
+
+  it('links a name that is an account, as the account spells it, whatever the case in the text', () => {
+    expect(tokenize('Hi @BOB, and @bob!', ['Bob'])).toEqual([
+      { kind: 'text', text: 'Hi ' },
+      { kind: 'mention', text: '@BOB', username: 'Bob' },
+      { kind: 'text', text: ', and ' },
+      { kind: 'mention', text: '@bob', username: 'Bob' },
+      { kind: 'text', text: '!' },
+    ]);
+  });
+
+  it('leaves a name that is not an account as plain text', () => {
+    expect(tokenize('@bob and @ghost', ['bob'])).toEqual([
+      { kind: 'mention', text: '@bob', username: 'bob' },
+      { kind: 'text', text: ' and @ghost' },
+    ]);
+  });
+
+  it('never links accounts the text does not name', () => {
+    expect(tokenize('no names here', ['bob', 'alice'])).toEqual([{ kind: 'text', text: 'no names here' }]);
+  });
+
+  it('links only the first ten names, whoever the accounts are', () => {
+    const names = Array.from({ length: 12 }, (_, i) => `user${String(i + 1).padStart(2, '0')}`);
+
+    expect(linked(names.map((n) => '@' + n).join(' '), names)).toEqual(names.slice(0, 10));
+  });
+
+  it('puts hashtags and mentions in the order they are written', () => {
+    expect(tokenize('#one @bob #two @alice', ['bob', 'alice'])).toEqual([
+      { kind: 'hashtag', text: '#one', tag: 'one' },
+      { kind: 'text', text: ' ' },
+      { kind: 'mention', text: '@bob', username: 'bob' },
+      { kind: 'text', text: ' ' },
+      { kind: 'hashtag', text: '#two', tag: 'two' },
+      { kind: 'text', text: ' ' },
+      { kind: 'mention', text: '@alice', username: 'alice' },
+    ]);
+  });
+
+  it('does not mistake an email address for a mention', () => {
+    expect(linked('write to bob@example.com', ['bob', 'example'])).toEqual([]);
+  });
+
+  it('does not treat markup as anything but text', () => {
+    const pieces = tokenize('<b>@bob</b> <script>@bob</script>', ['bob']);
+
+    expect(pieces.map((p) => p.text).join('')).toBe('<b>@bob</b> <script>@bob</script>');
+    expect(pieces.filter((p) => p.kind === 'mention')).toHaveLength(2);
   });
 });

@@ -41,6 +41,7 @@ export function makePost(id: number, overrides: Partial<Post> = {}): Post {
     isLiked: false,
     parentPostId: null,
     replyToUsername: null,
+    mentions: [],
     isRetweeted: false,
     retweetedBy: null,
     ...overrides,

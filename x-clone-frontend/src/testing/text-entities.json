@@ -1,67 +1,606 @@
 {
-  "_about": "Examples for what counts as a hashtag in a post. The C# parser (XCloneAPI/Services/HashtagParser.cs) and the TypeScript one (src/app/utils/text-entities.ts) are both tested against this same list, so the server and the app always agree on which words are hashtags. \"tags\" are lower case, without the #, in order of first appearance.",
+  "_about": "Examples for what counts as a hashtag or a mention in a post. The C# parsers (XCloneAPI/Services/HashtagParser.cs and MentionParser.cs) and the TypeScript ones (src/app/utils/text-entities.ts) are all tested against this same list, so the server and the app always agree on which words are links. For hashtags, \"tags\" are lower case, without the #, in order of first appearance. For mentions, \"names\" are without the @, as first written, in order of first appearance, each name once whatever its case.",
   "hashtags": [
-    { "text": "", "tags": [] },
-    { "text": "no tags here", "tags": [] },
-    { "text": "#", "tags": [] },
-    { "text": "a # b", "tags": [] },
-    { "text": "Hello #world", "tags": ["world"] },
-    { "text": "#start of the text", "tags": ["start"] },
-    { "text": "at the end #finish", "tags": ["finish"] },
-    { "text": "#a #b #c", "tags": ["a", "b", "c"] },
-    { "text": "#Tag #tag #TAG", "tags": ["tag"] },
-    { "text": "Sunset #Sunset and #sunset again", "tags": ["sunset"] },
-
-    { "text": "#2026", "tags": [] },
-    { "text": "#12345 #678", "tags": [] },
-    { "text": "#_", "tags": [] },
-    { "text": "#___", "tags": [] },
-    { "text": "#2026a", "tags": ["2026a"] },
-    { "text": "#a2026", "tags": ["a2026"] },
-    { "text": "#__a", "tags": ["__a"] },
-    { "text": "#snake_case_tag", "tags": ["snake_case_tag"] },
-
-    { "text": "#tag,", "tags": ["tag"] },
-    { "text": "#tag.", "tags": ["tag"] },
-    { "text": "#tag!", "tags": ["tag"] },
-    { "text": "#tag?", "tags": ["tag"] },
-    { "text": "(#tag)", "tags": ["tag"] },
-    { "text": "\"#tag\"", "tags": ["tag"] },
-    { "text": "#tag-more", "tags": ["tag"] },
-    { "text": "#tag's", "tags": ["tag"] },
-    { "text": "#one;#two", "tags": ["one", "two"] },
-    { "text": "#one,#two", "tags": ["one", "two"] },
-    { "text": "line one\n#second", "tags": ["second"] },
-    { "text": "tab\t#tabbed", "tags": ["tabbed"] },
-    { "text": "#a\n#b\n#a", "tags": ["a", "b"] },
-
-    { "text": "abc#def", "tags": [] },
-    { "text": "abc#def #real", "tags": ["real"] },
-    { "text": "123#456a", "tags": [] },
-    { "text": "under_score#tag", "tags": [] },
-    { "text": "snake_#tag", "tags": [] },
-    { "text": "é#tag", "tags": [] },
-    { "text": "é #tag", "tags": ["tag"] },
-    { "text": "##double", "tags": [] },
-    { "text": "###triple", "tags": [] },
-    { "text": "#tag#other", "tags": ["tag"] },
-    { "text": "&#39; is an entity", "tags": [] },
-    { "text": "&#x27;#tag", "tags": ["tag"] },
-    { "text": "me@example.com#top", "tags": [] },
-    { "text": "see http://example.com/page#section", "tags": [] },
-    { "text": "see http://example.com/#section", "tags": ["section"] },
-
-    { "text": "#café", "tags": ["café"] },
-    { "text": "#ÉCOLE", "tags": ["école"] },
-    { "text": "#日本語", "tags": ["日本語"] },
-    { "text": "#Ελληνικά", "tags": ["ελληνικά"] },
-    { "text": "#привет", "tags": ["привет"] },
-    { "text": "#वर्ल्ड", "tags": ["वर्ल्ड"] },
-    { "text": "#مرحبا", "tags": ["مرحبا"] },
-    { "text": "😀#tag", "tags": ["tag"] },
-    { "text": "#😀", "tags": [] },
-    { "text": "#tag😀", "tags": ["tag"] },
-    { "text": "#a😀#b", "tags": ["a", "b"] },
-    { "text": "  #padded  ", "tags": ["padded"] }
+    {
+      "text": "",
+      "tags": []
+    },
+    {
+      "text": "no tags here",
+      "tags": []
+    },
+    {
+      "text": "#",
+      "tags": []
+    },
+    {
+      "text": "a # b",
+      "tags": []
+    },
+    {
+      "text": "Hello #world",
+      "tags": [
+        "world"
+      ]
+    },
+    {
+      "text": "#start of the text",
+      "tags": [
+        "start"
+      ]
+    },
+    {
+      "text": "at the end #finish",
+      "tags": [
+        "finish"
+      ]
+    },
+    {
+      "text": "#a #b #c",
+      "tags": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "text": "#Tag #tag #TAG",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "Sunset #Sunset and #sunset again",
+      "tags": [
+        "sunset"
+      ]
+    },
+    {
+      "text": "#2026",
+      "tags": []
+    },
+    {
+      "text": "#12345 #678",
+      "tags": []
+    },
+    {
+      "text": "#_",
+      "tags": []
+    },
+    {
+      "text": "#___",
+      "tags": []
+    },
+    {
+      "text": "#2026a",
+      "tags": [
+        "2026a"
+      ]
+    },
+    {
+      "text": "#a2026",
+      "tags": [
+        "a2026"
+      ]
+    },
+    {
+      "text": "#__a",
+      "tags": [
+        "__a"
+      ]
+    },
+    {
+      "text": "#snake_case_tag",
+      "tags": [
+        "snake_case_tag"
+      ]
+    },
+    {
+      "text": "#tag,",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#tag.",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#tag!",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#tag?",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "(#tag)",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "\"#tag\"",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#tag-more",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#tag's",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#one;#two",
+      "tags": [
+        "one",
+        "two"
+      ]
+    },
+    {
+      "text": "#one,#two",
+      "tags": [
+        "one",
+        "two"
+      ]
+    },
+    {
+      "text": "line one\n#second",
+      "tags": [
+        "second"
+      ]
+    },
+    {
+      "text": "tab\t#tabbed",
+      "tags": [
+        "tabbed"
+      ]
+    },
+    {
+      "text": "#a\n#b\n#a",
+      "tags": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "text": "abc#def",
+      "tags": []
+    },
+    {
+      "text": "abc#def #real",
+      "tags": [
+        "real"
+      ]
+    },
+    {
+      "text": "123#456a",
+      "tags": []
+    },
+    {
+      "text": "under_score#tag",
+      "tags": []
+    },
+    {
+      "text": "snake_#tag",
+      "tags": []
+    },
+    {
+      "text": "é#tag",
+      "tags": []
+    },
+    {
+      "text": "é #tag",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "##double",
+      "tags": []
+    },
+    {
+      "text": "###triple",
+      "tags": []
+    },
+    {
+      "text": "#tag#other",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "&#39; is an entity",
+      "tags": []
+    },
+    {
+      "text": "&#x27;#tag",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "me@example.com#top",
+      "tags": []
+    },
+    {
+      "text": "see http://example.com/page#section",
+      "tags": []
+    },
+    {
+      "text": "see http://example.com/#section",
+      "tags": [
+        "section"
+      ]
+    },
+    {
+      "text": "#café",
+      "tags": [
+        "café"
+      ]
+    },
+    {
+      "text": "#ÉCOLE",
+      "tags": [
+        "école"
+      ]
+    },
+    {
+      "text": "#日本語",
+      "tags": [
+        "日本語"
+      ]
+    },
+    {
+      "text": "#Ελληνικά",
+      "tags": [
+        "ελληνικά"
+      ]
+    },
+    {
+      "text": "#привет",
+      "tags": [
+        "привет"
+      ]
+    },
+    {
+      "text": "#वर्ल्ड",
+      "tags": [
+        "वर्ल्ड"
+      ]
+    },
+    {
+      "text": "#مرحبا",
+      "tags": [
+        "مرحبا"
+      ]
+    },
+    {
+      "text": "😀#tag",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#😀",
+      "tags": []
+    },
+    {
+      "text": "#tag😀",
+      "tags": [
+        "tag"
+      ]
+    },
+    {
+      "text": "#a😀#b",
+      "tags": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "text": "  #padded  ",
+      "tags": [
+        "padded"
+      ]
+    }
+  ],
+  "mentions": [
+    {
+      "text": "",
+      "names": []
+    },
+    {
+      "text": "no mentions here",
+      "names": []
+    },
+    {
+      "text": "@",
+      "names": []
+    },
+    {
+      "text": "a @ b",
+      "names": []
+    },
+    {
+      "text": "@bob",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "Hi @Bob and @bob again",
+      "names": [
+        "Bob"
+      ]
+    },
+    {
+      "text": "@BOB @bob @Bob",
+      "names": [
+        "BOB"
+      ]
+    },
+    {
+      "text": "@bob @alice @carol",
+      "names": [
+        "bob",
+        "alice",
+        "carol"
+      ]
+    },
+    {
+      "text": "start @first and end @last",
+      "names": [
+        "first",
+        "last"
+      ]
+    },
+    {
+      "text": "@ab",
+      "names": []
+    },
+    {
+      "text": "@abc",
+      "names": [
+        "abc"
+      ]
+    },
+    {
+      "text": "@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "names": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      ]
+    },
+    {
+      "text": "@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "names": []
+    },
+    {
+      "text": "@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa @okk",
+      "names": [
+        "okk"
+      ]
+    },
+    {
+      "text": "@bob,",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob.",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob!",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob?",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "(@bob)",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "\"@bob\"",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob's",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob-smith",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob.smith",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob/@alice",
+      "names": [
+        "bob",
+        "alice"
+      ]
+    },
+    {
+      "text": "@bob;@alice",
+      "names": [
+        "bob",
+        "alice"
+      ]
+    },
+    {
+      "text": "@bob_smith_2",
+      "names": [
+        "bob_smith_2"
+      ]
+    },
+    {
+      "text": "@_a_",
+      "names": [
+        "_a_"
+      ]
+    },
+    {
+      "text": "@___",
+      "names": [
+        "___"
+      ]
+    },
+    {
+      "text": "@123",
+      "names": [
+        "123"
+      ]
+    },
+    {
+      "text": "line one\n@second",
+      "names": [
+        "second"
+      ]
+    },
+    {
+      "text": "tab\t@tabbed",
+      "names": [
+        "tabbed"
+      ]
+    },
+    {
+      "text": "  @padded  ",
+      "names": [
+        "padded"
+      ]
+    },
+    {
+      "text": "me@example.com",
+      "names": []
+    },
+    {
+      "text": "a@b",
+      "names": []
+    },
+    {
+      "text": "user_name@bob",
+      "names": []
+    },
+    {
+      "text": "snake_@bob",
+      "names": []
+    },
+    {
+      "text": "123@bob",
+      "names": []
+    },
+    {
+      "text": "email john.doe@example.com and @john",
+      "names": [
+        "john"
+      ]
+    },
+    {
+      "text": "@@bob",
+      "names": []
+    },
+    {
+      "text": "@bob@alice",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "#tag@bob",
+      "names": []
+    },
+    {
+      "text": "#@bob",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob #tag @alice",
+      "names": [
+        "bob",
+        "alice"
+      ]
+    },
+    {
+      "text": "@bobé",
+      "names": []
+    },
+    {
+      "text": "@bob日本",
+      "names": []
+    },
+    {
+      "text": "@bóbby",
+      "names": []
+    },
+    {
+      "text": "é@bob",
+      "names": []
+    },
+    {
+      "text": "é@bob",
+      "names": []
+    },
+    {
+      "text": "é @bob",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "😀@bob",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob😀",
+      "names": [
+        "bob"
+      ]
+    },
+    {
+      "text": "@bob😀@alice",
+      "names": [
+        "bob",
+        "alice"
+      ]
+    }
   ]
 }

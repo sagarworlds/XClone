@@ -21,6 +21,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Home Timeline Feed**: A live feed of posts from the users you follow, featuring a character-limited (280 chars) tweet composer.
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
 - **Load more**: The home timeline, profile tabs, reply threads and notifications load 20 entries at a time with a "Load more" button. Pages are read with cursors, so posting, deleting or undoing a repost in between (or other people doing the same) can never repeat or skip an entry, and a failed page can be retried without losing what is already on screen.
+- **Mentions**: Write `@username` in a post or reply to name someone. If the account exists, the name becomes a link to their profile and they get a notification ("mentioned you in a post"). You are not told about your own mentions, and someone you reply to is told once, as a reply.
 - **Hashtags**: A `#tag` in a post (or reply) is a link to that tag's page, which lists every post and reply that uses it, newest first, 20 at a time. The right-hand column shows what is trending: the five tags most used by posts of the last week.
 - **Images**: Attach up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each) to a post or a reply. They upload as soon as you pick them, with a preview you can remove, and show in a grid on the post; clicking one opens the full picture in a new tab.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
@@ -145,6 +146,15 @@ dotnet user-secrets set "Jwt:Key" "<a random string of 64+ characters>"
 
 ---
 
+### Mentions (API)
+
+A post's response has `mentions`: the usernames its text names with `@` that are real accounts, as they are spelled on their profiles (the app links only these). Nothing extra is sent when creating a post.
+
+- A mention is an `@` followed by 3-50 letters (a-z), digits or underscores (what a username is made of), not glued to a word in front (`me@example.com` is not one) and ending where the word ends. Names are matched without regard to case; each counts once per post; only the first 10 names of a post count.
+- The people named are told in the same save as the post (`type: "mention"`, `postId` is the post that names them), never for their own posts, and never twice: someone who already gets a `reply` notification for the same post does not get a second one.
+- **Usernames** may now only contain letters, digits and underscores (new accounts; a name that differs from an existing one only by case is taken too, since `@name` would otherwise be ambiguous). Older accounts keep working. If two older accounts differ only by case, `@name` finds the one spelled exactly like that, else the oldest.
+- The app and the server use the same rule (`utils/text-entities.ts` and `MentionParser.cs`), tested against the same list of examples, `x-clone-frontend/src/testing/text-entities.json`. Posts written before mentions existed were filled in by the migration (links only, nobody is notified about them).
+
 ### Hashtags (API)
 
 ```
@@ -198,7 +208,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), mentions (the rule, who is named and who is told, replies, accounts that differ by case, usernames, and the backfill), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests
@@ -214,6 +224,7 @@ npm test
 - **People lists:** the followers/following page (both tabs, paging, empty and failing lists, switching profiles, the route matcher), the shared user row with its follow button, and the sidebar search and "Who to follow" widgets.
 - **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
 - **Composer and images:** choosing, uploading, previewing and removing images, the limits, failing uploads, and that posting waits for uploads; the address helper that only ever loads our own images.
+- **Mentions and sign-up:** mention links (only real accounts, in the spelling of their profile), the mention notifications, and the sign-up page's username rule and error messages.
 - **Hashtags:** the tokenizer against the shared examples, the text component (links, no HTML, every character kept), the hashtag page, the Trends card, and the route table.
 - **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.

@@ -51,5 +51,6 @@ namespace XCloneAPI.Models
         public ICollection<Like> Likes { get; set; } = new List<Like>();
         public ICollection<Retweet> Retweets { get; set; } = new List<Retweet>();
         public ICollection<PostHashtag> Hashtags { get; set; } = new List<PostHashtag>();
+        public ICollection<PostMention> Mentions { get; set; } = new List<PostMention>();
     }
 }

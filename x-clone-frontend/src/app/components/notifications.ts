@@ -10,7 +10,7 @@ import { LoadMoreComponent } from './load-more';
 import { SidebarComponent } from './sidebar';
 import { WidgetsComponent } from './widgets';
 
-/** Who replied to or reposted your posts, newest first. Opening the page marks everything as read. */
+/** Who replied to, reposted or mentioned you, newest first. Opening the page marks everything as read. */
 @Component({
   selector: 'app-notifications',
   standalone: true,
@@ -29,19 +29,19 @@ import { WidgetsComponent } from './widgets';
         } @else if (list.items().length === 0) {
           <div class="state-message">
             <h3>{{ list.failed() ? "Couldn't load notifications" : 'Nothing to see yet' }}</h3>
-            <p>{{ list.failed() ? 'Check your connection and reload the page.' : "When someone replies to or reposts your posts, you'll see it here." }}</p>
+            <p>{{ list.failed() ? 'Check your connection and reload the page.' : "When someone replies to or reposts your posts, or mentions you, you'll see it here." }}</p>
           </div>
         } @else {
           @for (n of list.items(); track n.id) {
             <a class="notification" [class.unread]="!n.isRead" [routerLink]="['/post', n.postId]">
-              <span class="material-symbols-outlined type-icon" [class.repost]="n.type === 'repost'">
-                {{ n.type === 'repost' ? 'repeat' : 'chat_bubble' }}
+              <span class="material-symbols-outlined type-icon" [class.repost]="n.type === 'repost'" [class.mention]="n.type === 'mention'">
+                {{ iconOf(n.type) }}
               </span>
               <div class="notification-body">
                 <img [src]="n.actor.avatarUrl || defaultAvatar" alt="" class="avatar actor-avatar" />
                 <p class="summary">
                   <strong>{{ n.actor.displayName || n.actor.username }}</strong>
-                  {{ n.type === 'repost' ? 'reposted your post' : 'replied to your post' }}
+                  {{ summaryOf(n.type) }}
                   <span class="time">· {{ formatTime(n.createdAt) }}</span>
                 </p>
                 <p class="excerpt">{{ n.postContent }}</p>
@@ -87,6 +87,9 @@ import { WidgetsComponent } from './widgets';
     .type-icon.repost {
       color: var(--success-color);
     }
+    .type-icon.mention {
+      color: var(--warning-color, #ffd400);
+    }
     .notification-body {
       min-width: 0;
       flex-grow: 1;
@@ -116,6 +119,14 @@ export class NotificationsComponent implements OnInit {
 
   readonly defaultAvatar = 'https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png';
   readonly formatTime = formatTime;
+
+  iconOf(type: AppNotification['type']): string {
+    return type === 'repost' ? 'repeat' : type === 'mention' ? 'alternate_email' : 'chat_bubble';
+  }
+
+  summaryOf(type: AppNotification['type']): string {
+    return type === 'repost' ? 'reposted your post' : type === 'mention' ? 'mentioned you in a post' : 'replied to your post';
+  }
 
   readonly list = new PagedList<AppNotification>(
     (cursor, take) =>

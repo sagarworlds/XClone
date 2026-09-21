@@ -35,7 +35,8 @@ namespace XCloneAPI.Services
                 if (await _context.Users.AnyAsync(u => u.Email == request.Email))
                     throw new ArgumentException("Email already registered");
 
-                if (await _context.Users.AnyAsync(u => u.Username == request.Username))
+                // Names that differ only by case would make "@name" ambiguous, so they count as taken too
+                if (await _context.Users.AnyAsync(u => u.Username.ToLower() == request.Username.ToLower()))
                     throw new ArgumentException("Username already taken");
 
                 // Create new user
