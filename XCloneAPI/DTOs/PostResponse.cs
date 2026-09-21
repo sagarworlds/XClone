@@ -18,6 +18,10 @@
         public int? ParentPostId { get; set; }
         public string? ReplyToUsername { get; set; }
 
+        // The usernames (as they are spelled on their profiles) that the text names with @ and that exist; the app
+        // links only these
+        public string[] Mentions { get; set; } = Array.Empty<string>();
+
         // Retweet info: whether the current user retweeted it, and (in timelines) who retweeted it into this entry
         public bool IsRetweeted { get; set; }
         public UserResponse? RetweetedBy { get; set; }

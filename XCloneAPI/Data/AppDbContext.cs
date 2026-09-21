@@ -16,6 +16,7 @@ namespace XCloneAPI.Data
         public DbSet<Follow> Follows { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<PostHashtag> PostHashtags { get; set; }
+        public DbSet<PostMention> PostMentions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -65,6 +66,25 @@ namespace XCloneAPI.Data
 
             modelBuilder.Entity<PostHashtag>()
                 .HasIndex(h => new { h.Tag, h.PostId });
+
+            // Mention Configuration: one row per user named in a post, gone with the post or the user
+            modelBuilder.Entity<PostMention>()
+                .HasKey(m => new { m.PostId, m.UserId });
+
+            modelBuilder.Entity<PostMention>()
+                .HasOne(m => m.Post)
+                .WithMany(p => p.Mentions)
+                .HasForeignKey(m => m.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PostMention>()
+                .HasOne(m => m.User)
+                .WithMany()
+                .HasForeignKey(m => m.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PostMention>()
+                .HasIndex(m => m.UserId);
 
             // Like Configuration
             modelBuilder.Entity<Like>()

@@ -154,6 +154,34 @@ describe('PostCardComponent', () => {
     });
   });
 
+  describe('mentions', () => {
+    const mentionLinks = () => [...el().querySelectorAll<HTMLAnchorElement>('.post-text-content a.mention')];
+
+    it('of real accounts are links to their profiles, and unknown names stay text', async () => {
+      await show(makePost(7, { content: 'Hello @Bob and @ghost', mentions: ['Bob'] }));
+
+      expect(mentionLinks().map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['@Bob', '/profile/Bob']]);
+      expect(el().querySelector('.post-text-content')?.textContent).toBe('Hello @Bob and @ghost');
+    });
+
+    it('go to the profile when clicked, and do not open the thread', async () => {
+      const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+      await show(makePost(7, { content: 'Hello @Bob', mentions: ['Bob'] }));
+
+      mentionLinks()[0].click();
+
+      expect(navigateByUrl).toHaveBeenCalledOnce();
+      expect(TestBed.inject(Router).serializeUrl(navigateByUrl.mock.calls[0][0] as never)).toBe('/profile/Bob');
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('are not links when the post says it names nobody', async () => {
+      await show(makePost(7, { content: 'Hello @Bob', mentions: [] }));
+
+      expect(mentionLinks()).toHaveLength(0);
+    });
+  });
+
   describe('images', () => {
     const image = (letter: string, extension = 'png') => `/uploads/${letter.repeat(32)}.${extension}`;
     const grid = () => el().querySelector<HTMLElement>('.media-grid');

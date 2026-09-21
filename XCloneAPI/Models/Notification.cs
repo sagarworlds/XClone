@@ -8,7 +8,9 @@ namespace XCloneAPI.Models
         // Someone replied to one of your posts; PostId is the reply
         Reply,
         // Someone reposted one of your posts; PostId is the post that was reposted
-        Repost
+        Repost,
+        // Someone named you (@username) in a post; PostId is that post
+        Mention
     }
 
     [Table("notifications")]

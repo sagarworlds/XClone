@@ -6,6 +6,7 @@ namespace XCloneAPI.DTOs
     {
         [Required]
         [StringLength(50, MinimumLength = 3)]
+        [RegularExpression(@"^[A-Za-z0-9_]+\z", ErrorMessage = "Usernames can only contain letters, digits and underscores.")]
         public string Username { get; set; }
 
         [Required]

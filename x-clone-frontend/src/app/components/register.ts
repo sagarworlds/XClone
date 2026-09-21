@@ -4,6 +4,19 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
 
+/**
+ * What to tell the user when signing up failed: the server's own message ("Username already taken"), else the first
+ * validation message (the API answers rule violations such as an invalid username in the standard "errors" list),
+ * else a general hint.
+ */
+export function registrationError(err: { error?: { message?: string; errors?: Record<string, string[]> } }): string {
+  const message = err.error?.message;
+  if (message) return message;
+
+  const validation = Object.values(err.error?.errors ?? {}).flat()[0];
+  return validation ?? 'Error occurred during registration. Try a different username/email.';
+}
+
 @Component({
   selector: 'app-register',
   standalone: true,
@@ -32,9 +45,14 @@ import { ApiService } from '../services/api.service';
               name="username" 
               [(ngModel)]="user.username" 
               required 
+              minlength="3"
+              maxlength="50"
+              pattern="[A-Za-z0-9_]+"
               placeholder="Username (e.g. johndoe)"
               class="form-input"
+              aria-describedby="username-hint"
             />
+            <p id="username-hint" class="field-hint">Letters, digits and underscores only, so that people can @mention you.</p>
           </div>
 
           <div class="form-group">
@@ -182,6 +200,11 @@ import { ApiService } from '../services/api.service';
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .field-hint {
+      margin: 6px 4px 0;
+      color: #71767b;
+      font-size: 0.8rem;
+    }
     .error-banner {
       background-color: #f4212e;
       color: #fff;
@@ -232,7 +255,7 @@ export class RegisterComponent {
       },
       error: (err) => {
         this.loading.set(false);
-        this.error.set(err.error?.message || 'Error occurred during registration. Try a different username/email.');
+        this.error.set(registrationError(err));
       }
     });
   }

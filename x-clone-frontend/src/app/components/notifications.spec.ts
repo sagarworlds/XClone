@@ -85,13 +85,39 @@ describe('NotificationsComponent', () => {
     expect(items()[0].textContent).toContain('nameless');
   });
 
-  it('shows the type as an icon: a speech bubble for replies, arrows for reposts', async () => {
-    await open([makeNotification(1, { type: 'reply' }), makeNotification(2, { type: 'repost' })]);
+  it('shows the type as an icon: a speech bubble for replies, arrows for reposts, an @ for mentions', async () => {
+    await open([makeNotification(1, { type: 'reply' }), makeNotification(2, { type: 'repost' }), makeNotification(3, { type: 'mention' })]);
     answerReadAll();
 
     const icons = items().map((a) => a.querySelector('.type-icon')?.textContent?.trim());
-    expect(icons).toEqual(['chat_bubble', 'repeat']);
+    expect(icons).toEqual(['chat_bubble', 'repeat', 'alternate_email']);
     expect(items()[1].querySelector('.type-icon')?.classList).toContain('repost');
+    expect(items()[2].querySelector('.type-icon')?.classList).toContain('mention');
+    expect(items()[0].querySelector('.type-icon')?.classList).not.toContain('mention');
+  });
+
+  it('says what each kind of notification is about', async () => {
+    const actor = makeUser({ id: 2, username: 'other', displayName: 'Other', email: '' });
+    await open([
+      makeNotification(1, { type: 'reply', actor }),
+      makeNotification(2, { type: 'repost', actor }),
+      makeNotification(3, { type: 'mention', actor }),
+    ]);
+    answerReadAll();
+
+    expect(items().map((a) => a.querySelector('.summary')?.textContent?.replace(/\s+/g, ' ').trim().replace(/ · .*$/, ''))).toEqual([
+      'Other replied to your post',
+      'Other reposted your post',
+      'Other mentioned you in a post',
+    ]);
+  });
+
+  it('opens the post that mentions you', async () => {
+    await open([makeNotification(3, { type: 'mention', postId: 321, postContent: 'hello @me' })]);
+    answerReadAll();
+
+    expect(items()[0].getAttribute('href')).toBe('/post/321');
+    expect(items()[0].querySelector('.excerpt')?.textContent).toBe('hello @me');
   });
 
   describe('marking as read', () => {
@@ -151,7 +177,7 @@ describe('NotificationsComponent', () => {
 
       expect(items()).toHaveLength(0);
       expect(el().textContent).toContain('Nothing to see yet');
-      expect(el().textContent).toContain('replies to or reposts your posts');
+      expect(el().textContent).toContain('replies to or reposts your posts, or mentions you');
     });
 
     it('says so when the notifications could not be loaded', async () => {

@@ -92,4 +92,79 @@ describe('PostTextComponent', () => {
 
     expect(el().textContent).toBe('');
   });
+
+  describe('mentions', () => {
+    async function showWith(text: string, mentions: string[]) {
+      fixture = TestBed.createComponent(PostTextComponent);
+      fixture.componentRef.setInput('text', text);
+      fixture.componentRef.setInput('mentions', mentions);
+      fixture.detectChanges();
+      await fixture.whenStable();
+    }
+
+    const mentionLinks = () => [...el().querySelectorAll<HTMLAnchorElement>('a.mention')];
+
+    it('makes the name of an account a link to its profile, and leaves the words around it alone', async () => {
+      await showWith('Thanks @Bob, see you!', ['Bob']);
+
+      expect(el().textContent).toBe('Thanks @Bob, see you!');
+      expect(mentionLinks().map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['@Bob', '/profile/Bob']]);
+    });
+
+    it('links to the profile as it is spelled there, whatever the case in the text', async () => {
+      await showWith('@BOB @bob', ['Bob']);
+
+      expect(mentionLinks().map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+        ['@BOB', '/profile/Bob'],
+        ['@bob', '/profile/Bob'],
+      ]);
+    });
+
+    it('leaves a name that is not an account as plain text', async () => {
+      await showWith('@bob and @ghost', ['bob']);
+
+      expect(mentionLinks().map((a) => a.textContent)).toEqual(['@bob']);
+      expect(el().textContent).toBe('@bob and @ghost');
+    });
+
+    it('links nothing when the post names no accounts, or does not say', async () => {
+      await showWith('@bob', []);
+      expect(mentionLinks()).toHaveLength(0);
+
+      await show('@bob');
+      expect(mentionLinks()).toHaveLength(0);
+    });
+
+    it('shows hashtags and mentions together, each as its own link', async () => {
+      await showWith('#sunset with @alice', ['alice']);
+
+      expect(links().map((a) => [a.className, a.getAttribute('href')])).toEqual([
+        ['hashtag', '/hashtag/sunset'],
+        ['mention', '/profile/alice'],
+      ]);
+    });
+
+    it('does not turn an email address into a link', async () => {
+      await showWith('write to bob@example.com', ['bob', 'example']);
+
+      expect(links()).toHaveLength(0);
+    });
+
+    it('updates when the accounts arrive later', async () => {
+      await showWith('hi @bob', []);
+      expect(mentionLinks()).toHaveLength(0);
+
+      fixture.componentRef.setInput('mentions', ['bob']);
+      await fixture.whenStable();
+
+      expect(mentionLinks()).toHaveLength(1);
+    });
+
+    it('copes with a post from before mentions existed, which has no list at all', async () => {
+      await showWith('hi @bob', undefined as unknown as string[]);
+
+      expect(mentionLinks()).toHaveLength(0);
+      expect(el().textContent).toBe('hi @bob');
+    });
+  });
 });

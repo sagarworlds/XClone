@@ -42,13 +42,20 @@ namespace XCloneAPI.Services
                     Hashtags = HashtagsOf(request.Content)
                 };
 
+                // Name the people the text mentions, and tell them (not yourself), all in the same save as the post
+                var mentioned = await ResolveMentionsAsync(request.Content);
+                post.Mentions = mentioned.Select(u => new PostMention { UserId = u.Id }).ToList();
+                AddMentionNotifications(post, userId, mentioned, alreadyNotified: null);
+
                 _context.Posts.Add(post);
                 await _context.SaveChangesAsync();
 
                 var user = await _context.Users.FindAsync(userId);
                 _logger.LogInformation($"Post created by user {userId}");
 
-                return MapToPostResponse(post, user, isLiked: false, isRetweeted: false);
+                var response = MapToPostResponse(post, user, isLiked: false, isRetweeted: false);
+                response.Mentions = MentionNames(mentioned);
+                return response;
             }
             catch (ArgumentException)
             {
@@ -82,6 +89,9 @@ namespace XCloneAPI.Services
                     Hashtags = HashtagsOf(request.Content)
                 };
 
+                var mentioned = await ResolveMentionsAsync(request.Content);
+                reply.Mentions = mentioned.Select(u => new PostMention { UserId = u.Id }).ToList();
+
                 parent.RepliesCount++;
                 _context.Posts.Add(reply);
 
@@ -98,6 +108,9 @@ namespace XCloneAPI.Services
                     });
                 }
 
+                // The author of the post being replied to is already told about the reply itself
+                AddMentionNotifications(reply, userId, mentioned, alreadyNotified: parent.UserId);
+
                 await _context.SaveChangesAsync();
 
                 var user = await _context.Users.FindAsync(userId);
@@ -105,6 +118,7 @@ namespace XCloneAPI.Services
 
                 var response = MapToPostResponse(reply, user, isLiked: false, isRetweeted: false);
                 response.ReplyToUsername = parent.User.Username;
+                response.Mentions = MentionNames(mentioned);
                 return response;
             }
             catch (ArgumentException)
@@ -242,6 +256,50 @@ namespace XCloneAPI.Services
                 throw;
             }
         }
+
+        // The users a text names with @ that exist, at most 10. A name matches without regard to case; when two
+        // accounts differ only by case (older accounts), the one spelled exactly as written wins.
+        private async Task<List<User>> ResolveMentionsAsync(string content)
+        {
+            var names = MentionParser.Parse(content);
+            if (names.Count == 0)
+                return new List<User>();
+
+            var lowered = names.Select(n => n.ToLowerInvariant()).ToList();
+            var candidates = await _context.Users
+                .Where(u => lowered.Contains(u.Username.ToLower()))
+                .OrderBy(u => u.Id)
+                .ToListAsync();
+
+            var resolved = new List<User>();
+            foreach (var name in names)
+            {
+                var matches = candidates.Where(u => string.Equals(u.Username, name, StringComparison.OrdinalIgnoreCase)).ToList();
+                var user = matches.FirstOrDefault(u => u.Username == name) ?? matches.FirstOrDefault();
+                if (user != null && !resolved.Contains(user))
+                    resolved.Add(user);
+            }
+
+            return resolved;
+        }
+
+        // Everyone named in the post is told, except the author and the one who is told about the post anyway
+        private void AddMentionNotifications(Post post, int authorId, List<User> mentioned, int? alreadyNotified)
+        {
+            foreach (var user in mentioned.Where(u => u.Id != authorId && u.Id != alreadyNotified))
+            {
+                _context.Notifications.Add(new Notification
+                {
+                    RecipientId = user.Id,
+                    ActorId = authorId,
+                    Type = NotificationType.Mention,
+                    Post = post
+                });
+            }
+        }
+
+        private static string[] MentionNames(IEnumerable<User> users) =>
+            users.Select(u => u.Username).OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
         // The rows that record a post's hashtags (saved together with the post)
         private static List<PostHashtag> HashtagsOf(string content) =>
@@ -410,6 +468,13 @@ namespace XCloneAPI.Services
                 .Select(r => r.PostId)
                 .ToListAsync()).ToHashSet();
 
+            var mentions = (await _context.PostMentions
+                    .Where(m => postIds.Contains(m.PostId))
+                    .Select(m => new { m.PostId, m.User.Username })
+                    .ToListAsync())
+                .GroupBy(m => m.PostId)
+                .ToDictionary(g => g.Key, g => g.Select(m => m.Username).OrderBy(n => n, StringComparer.Ordinal).ToArray());
+
             var retweeters = retweeterIds.Count == 0
                 ? new Dictionary<int, User>()
                 : await _context.Users.Where(u => retweeterIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id);
@@ -422,6 +487,7 @@ namespace XCloneAPI.Services
 
                 var response = MapToPostResponse(post, post.User, likedIds.Contains(post.Id), retweetedIds.Contains(post.Id));
                 response.ReplyToUsername = post.ParentPost?.User?.Username;
+                response.Mentions = mentions.GetValueOrDefault(post.Id, Array.Empty<string>());
                 if (entry.RetweeterId != null && retweeters.TryGetValue(entry.RetweeterId.Value, out var retweeter))
                     response.RetweetedBy = MapToUserResponse(retweeter);
 

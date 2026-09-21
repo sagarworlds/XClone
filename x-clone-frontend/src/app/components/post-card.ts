@@ -60,7 +60,7 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
             </div>
           }
 
-          <p class="post-text-content"><app-post-text [text]="p.content" /></p>
+          <p class="post-text-content"><app-post-text [text]="p.content" [mentions]="p.mentions" /></p>
 
           @if (images().length > 0) {
             <div class="media-grid" [class]="'media-grid count-' + images().length">
