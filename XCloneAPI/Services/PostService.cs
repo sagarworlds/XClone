@@ -305,6 +305,79 @@ namespace XCloneAPI.Services
         private static List<PostHashtag> HashtagsOf(string content) =>
             HashtagParser.Parse(content).Select(tag => new PostHashtag { Tag = tag }).ToList();
 
+        // Changes the text of one of your own posts (null when there is no such post or it is not yours). The hashtags
+        // and mentions are worked out again: their rows follow the new text, and only people who are named now and
+        // were not before are told. Someone taken out of the text loses the notification about it. Saying the same
+        // thing again changes nothing (no "edited" mark).
+        public async Task<PostResponse?> UpdatePostAsync(int postId, int userId, UpdatePostRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.Content))
+                    throw new ArgumentException("Post content cannot be empty");
+
+                var post = await _context.Posts
+                    .Include(p => p.Hashtags)
+                    .Include(p => p.Mentions)
+                    .FirstOrDefaultAsync(p => p.Id == postId);
+                if (post == null || post.UserId != userId)
+                    return null;
+
+                if (request.Content == post.Content)
+                    return await GetPostByIdAsync(postId, userId);
+
+                // The database keeps microseconds, so the answer carries exactly what a later read will show
+                var now = DateTime.UtcNow;
+                now = new DateTime(now.Ticks - now.Ticks % 10, DateTimeKind.Utc);
+                post.Content = request.Content;
+                post.UpdatedAt = now;
+                post.EditedAt = now;
+
+                var tags = HashtagParser.Parse(request.Content);
+                _context.PostHashtags.RemoveRange(post.Hashtags.Where(h => !tags.Contains(h.Tag)).ToList());
+                foreach (var tag in tags.Where(t => post.Hashtags.All(h => h.Tag != t)))
+                    post.Hashtags.Add(new PostHashtag { Tag = tag });
+
+                var mentioned = await ResolveMentionsAsync(request.Content);
+                var mentionedIds = mentioned.Select(u => u.Id).ToHashSet();
+                var alreadyMentioned = post.Mentions.Select(m => m.UserId).ToHashSet();
+
+                var dropped = post.Mentions.Where(m => !mentionedIds.Contains(m.UserId)).ToList();
+                if (dropped.Count > 0)
+                {
+                    _context.PostMentions.RemoveRange(dropped);
+                    var droppedIds = dropped.Select(m => m.UserId).ToList();
+                    _context.Notifications.RemoveRange(await _context.Notifications
+                        .Where(n => n.PostId == postId && n.Type == NotificationType.Mention && droppedIds.Contains(n.RecipientId))
+                        .ToListAsync());
+                }
+
+                var added = mentioned.Where(u => !alreadyMentioned.Contains(u.Id)).ToList();
+                foreach (var user in added)
+                    post.Mentions.Add(new PostMention { UserId = user.Id });
+
+                // The author of the post a reply answers is told about the reply anyway
+                int? repliedTo = post.ParentPostId == null
+                    ? null
+                    : await _context.Posts.Where(p => p.Id == post.ParentPostId).Select(p => (int?)p.UserId).FirstOrDefaultAsync();
+                AddMentionNotifications(post, userId, added, alreadyNotified: repliedTo);
+
+                await _context.SaveChangesAsync();
+                _logger.LogInformation($"Post {postId} edited by user {userId}");
+
+                return await GetPostByIdAsync(postId, userId);
+            }
+            catch (ArgumentException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error editing post: {ex.Message}");
+                throw;
+            }
+        }
+
         public async Task<bool> DeletePostAsync(int postId, int userId)
         {
             try
@@ -521,6 +594,7 @@ namespace XCloneAPI.Services
                 RepliesCount = post.RepliesCount,
                 CreatedAt = post.CreatedAt,
                 UpdatedAt = post.UpdatedAt,
+                EditedAt = post.EditedAt,
                 IsLiked = isLiked,
                 IsRetweeted = isRetweeted,
                 ParentPostId = post.ParentPostId,

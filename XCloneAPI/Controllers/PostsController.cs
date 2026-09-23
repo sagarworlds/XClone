@@ -195,6 +195,29 @@ namespace XCloneAPI.Controllers
             }
         }
 
+        // Changes the text of your own post; anyone else's (or a missing one) is the same 404 as for deleting
+        [HttpPut("{id:int}")]
+        public async Task<ActionResult<PostResponse>> UpdatePost(int id, [FromBody] UpdatePostRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+                var post = await _postService.UpdatePostAsync(id, userId, request);
+                if (post == null)
+                    return NotFound(new { message = "Post not found or unauthorized" });
+                return Ok(post);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error editing post: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(int id)
         {

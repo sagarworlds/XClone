@@ -1,9 +1,11 @@
-import { Component, computed, inject, input, linkedSignal, output } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, computed, inject, input, linkedSignal, output, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
 import { Post } from '../models/types';
 import { formatTime } from '../utils/format-time';
 import { mediaSrc } from '../utils/media-url';
+import { PostEditorComponent } from './post-editor';
 import { PostTextComponent } from './post-text';
 
 /**
@@ -19,7 +21,7 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
 @Component({
   selector: 'app-post-card',
   standalone: true,
-  imports: [RouterLink, PostTextComponent],
+  imports: [RouterLink, PostTextComponent, PostEditorComponent],
   template: `
     @let p = state();
     <article class="post-card" [class.clickable]="!focus()" [class.focus]="focus()" (click)="open($event)">
@@ -45,12 +47,23 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
               <span class="post-username">@{{ p.user.username }}</span>
               <span class="post-dot">·</span>
               <span class="post-time">{{ formatTime(p.createdAt) }}</span>
+              @if (p.editedAt) {
+                <span class="post-dot">·</span>
+                <span class="post-edited" [title]="'Edited ' + editedAt(p.editedAt)">Edited</span>
+              }
             </div>
 
             @if (isOwn()) {
-              <button class="delete-post-btn" title="Delete" (click)="deletePost($event)">
-                <span class="material-symbols-outlined delete-icon">delete</span>
-              </button>
+              <div class="owner-actions">
+                @if (!editing()) {
+                  <button class="edit-post-btn" title="Edit" aria-label="Edit post" (click)="startEdit($event)">
+                    <span class="material-symbols-outlined delete-icon">edit</span>
+                  </button>
+                }
+                <button class="delete-post-btn" title="Delete" (click)="deletePost($event)">
+                  <span class="material-symbols-outlined delete-icon">delete</span>
+                </button>
+              </div>
             }
           </div>
 
@@ -60,7 +73,17 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
             </div>
           }
 
-          <p class="post-text-content"><app-post-text [text]="p.content" [mentions]="p.mentions" /></p>
+          @if (editing()) {
+            <app-post-editor
+              [content]="p.content"
+              [saving]="saving()"
+              [error]="editError()"
+              (submitted)="saveEdit($event)"
+              (cancelled)="cancelEdit()"
+            />
+          } @else {
+            <p class="post-text-content"><app-post-text [text]="p.content" [mentions]="p.mentions" /></p>
+          }
 
           @if (images().length > 0) {
             <div class="media-grid" [class]="'media-grid count-' + images().length">
@@ -151,11 +174,15 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
       font-weight: 700;
       color: var(--text-primary);
     }
-    .post-username, .post-dot, .post-time {
+    .post-username, .post-dot, .post-time, .post-edited {
       color: var(--text-secondary);
       font-size: 0.9rem;
     }
-    .delete-post-btn {
+    .owner-actions {
+      display: flex;
+      gap: 2px;
+    }
+    .delete-post-btn, .edit-post-btn {
       background: transparent;
       color: var(--text-secondary);
       border-radius: 50%;
@@ -167,6 +194,10 @@ export const postEntryKey = (post: Post): string => `${post.id}-${post.retweeted
     .delete-post-btn:hover {
       background-color: rgba(244, 33, 46, 0.1);
       color: var(--danger-color);
+    }
+    .edit-post-btn:hover {
+      background-color: rgba(29, 155, 240, 0.1);
+      color: var(--accent-color);
     }
     .delete-icon {
       font-size: 1.2rem;
@@ -282,6 +313,10 @@ export class PostCardComponent {
 
   // Local copy so optimistic updates re-render; it resets whenever the parent passes a new post.
   readonly state = linkedSignal(() => this.post());
+  // Editing the text: open only for the post it was opened on (a different post handed in closes it)
+  readonly editing = linkedSignal<number, boolean>({ source: () => this.post().id, computation: () => false });
+  readonly saving = signal(false);
+  readonly editError = signal<string | null>(null);
   readonly isOwn = computed(() => this.currentUser()?.id === this.state().userId);
   /** The post's images, as addresses to load them from (pictures that are not ours are left out). */
   readonly images = computed(() =>
@@ -328,6 +363,35 @@ export class PostCardComponent {
     this.changed.emit(next);
   }
 
+  startEdit(event: Event): void {
+    event.stopPropagation();
+    this.editError.set(null);
+    this.editing.set(true);
+  }
+
+  cancelEdit(): void {
+    this.editing.set(false);
+    this.editError.set(null);
+  }
+
+  saveEdit(content: string): void {
+    if (this.saving()) return;
+    this.saving.set(true);
+    this.editError.set(null);
+    this.api.updatePost(this.state().id, content).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.editing.set(false);
+        // The answer is the post itself; in a timeline the entry still says who reposted it
+        this.update({ ...updated, retweetedBy: this.state().retweetedBy });
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.editError.set(err.error?.message ?? 'Could not save your changes. Please try again.');
+      },
+    });
+  }
+
   deletePost(event: Event): void {
     event.stopPropagation();
     if (!confirm('Are you sure you want to delete this post?')) return;
@@ -339,4 +403,5 @@ export class PostCardComponent {
   }
 
   readonly formatTime = formatTime;
+  readonly editedAt = (iso: string): string => new Date(iso).toLocaleString();
 }

@@ -41,6 +41,10 @@ namespace XCloneAPI.Models
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+        // When the author last changed the text; null for a post that was never edited
+        [Column("edited_at")]
+        public DateTime? EditedAt { get; set; }
+
         // Navigation Properties
         [ForeignKey("UserId")]
         public User User { get; set; }
