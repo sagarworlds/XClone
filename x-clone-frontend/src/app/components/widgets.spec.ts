@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
 import { API, http, makeUser, provideAppTesting, signInAs } from '../../testing/helpers';
 import { TrendingHashtag, User } from '../models/types';
 import { WidgetsComponent } from './widgets';
@@ -44,10 +45,13 @@ describe('WidgetsComponent', () => {
     await settle();
   }
 
+  let navigate: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     localStorage.clear();
     signInAs(me);
     TestBed.configureTestingModule({ imports: [WidgetsComponent], providers: provideAppTesting() });
+    navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
   });
 
   afterEach(() => {
@@ -171,6 +175,44 @@ describe('WidgetsComponent', () => {
 
       http().expectNone((r) => r.url === `${API}/users/search`);
       expect(card('Search Results')).toBeUndefined();
+    });
+
+    describe('pressing Enter', () => {
+      const input = () => el().querySelector<HTMLInputElement>('.search-box input')!;
+      const pressEnter = () => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+      it('goes to the search page with what was typed', async () => {
+        await open();
+        await type('bo');
+        http().expectOne((r) => r.url === `${API}/users/search`).flush([bob]);
+        await settle();
+
+        pressEnter();
+
+        expect(navigate).toHaveBeenCalledExactlyOnceWith(['/search'], { queryParams: { q: 'bo' } });
+      });
+
+      it('trims the query, and goes nowhere for nothing but spaces', async () => {
+        await open();
+        await type('  bo  ');
+        http().expectOne((r) => r.url === `${API}/users/search`).flush([bob]);
+        await settle();
+        pressEnter();
+        expect(navigate).toHaveBeenCalledExactlyOnceWith(['/search'], { queryParams: { q: 'bo' } });
+
+        await type('   ');
+        pressEnter();
+
+        expect(navigate).toHaveBeenCalledOnce(); // still just the one call from before
+      });
+
+      it('does nothing before anything is typed', async () => {
+        await open();
+
+        pressEnter();
+
+        expect(navigate).not.toHaveBeenCalled();
+      });
     });
   });
 });

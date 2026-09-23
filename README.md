@@ -26,6 +26,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Hashtags**: A `#tag` in a post (or reply) is a link to that tag's page, which lists every post and reply that uses it, newest first, 20 at a time. The right-hand column shows what is trending: the five tags most used by posts of the last week.
 - **Images**: Attach up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each) to a post or a reply. They upload as soon as you pick them, with a preview you can remove, and show in a grid on the post; clicking one opens the full picture in a new tab.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
+- **Search**: The box in the right-hand column also takes you to a search page (Posts and People tabs) when you press Enter. Post search matches the text of posts and replies (case-insensitively); starting the query with `#` searches by hashtag instead.
 - **Reposts**: Repost/undo with one click. Reposts show up in your followers' timelines and on your profile with a "reposted" banner.
 - **Notifications**: You are told when someone replies to or reposts one of your posts (never for your own actions). The sidebar shows an unread badge that refreshes every 30 seconds, and the Notifications page lists everything newest first, highlights what is new, and marks it all as read when you open it. Undoing a repost, or deleting the reply or the post, takes its notification back.
 - **User Profiles**: Custom banners, avatars, display names, follower/following counts, an exact post count (top-level posts and reposts, matching the Posts tab; replies are not counted), join dates, and an interactive edit-profile modal.
@@ -166,6 +167,14 @@ A post's response has `mentions`: the usernames its text names with `@` that are
 - The hashtags and mentions are worked out again from the new text (the rows follow it). Only people who are named now and were not before get a `mention` notification; someone taken out of the text loses the notification about it, and would be told again if named again later. The author of the post a reply answers is still told once, as a reply.
 - Migration `AddPostEditedAt` adds the nullable column `posts.edited_at`; posts written before it count as never edited.
 
+### Post search (API)
+
+`GET /api/posts/search?query=&cursor=&take=` (signed in only) finds posts and replies whose text contains `query`, newest first, cursor-paged like the other lists.
+
+- `query` is required, trimmed, and 1-100 characters; `%`, `_` and `\` in it are taken as plain text, never as `ILIKE` wildcards (the same escaping the user search below uses).
+- A query that starts with `#` and is otherwise a whole hashtag (letters, digits, underscores, at least one letter) searches by that tag instead of by text - the same list `GET /api/posts/hashtag/{tag}` gives. A `#` that is not followed by a whole tag (a space in it, or only digits) is searched as ordinary text, hash included.
+- `GET /api/users/search?query=&take=` (unchanged in shape) also matches without regard to case now, on both the username and the display name, with the same wildcard escaping.
+
 ### Hashtags (API)
 
 ```
@@ -219,7 +228,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), mentions (the rule, who is named and who is told, replies, accounts that differ by case, usernames, and the backfill), editing posts (who may, what is accepted, what changes and what stays, hashtags and mentions following the new text, timeline order and paging, and the migration), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), mentions (the rule, who is named and who is told, replies, accounts that differ by case, usernames, and the backfill), editing posts (who may, what is accepted, what changes and what stays, hashtags and mentions following the new text, timeline order and paging, and the migration), post and user search (matching, the `#tag` path, wildcard and backslash characters as plain text, paging with changes in between, and what is refused), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests
@@ -237,6 +246,7 @@ npm test
 - **Composer and images:** choosing, uploading, previewing and removing images, the limits, failing uploads, and that posting waits for uploads; the address helper that only ever loads our own images.
 - **Mentions and sign-up:** mention links (only real accounts, in the spelling of their profile), the mention notifications, and the sign-up page's username rule and error messages.
 - **Editing:** the editor box (counter, Save only when there is something new, Cancel and keyboard shortcuts, locked while saving, failures), and the card's pencil, save, cancel and failure handling, the "Edited" label, and that the timeline entry keeps its repost banner.
+- **Search:** the search page's Posts and People tabs (paging, empty and failing states, switching tabs without asking again, changing the query, leaving the page), and Enter in the sidebar's search box going there.
 - **Hashtags:** the tokenizer against the shared examples, the text component (links, no HTML, every character kept), the hashtag page, the Trends card, and the route table.
 - **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.

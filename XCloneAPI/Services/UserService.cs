@@ -75,12 +75,16 @@ namespace XCloneAPI.Services
             }
         }
 
+        // Matches without regard to case (Contains on a string column is case-sensitive in Postgres); the query's own
+        // %, _ and \ are taken literally, not as ILIKE wildcards.
         public async Task<List<UserResponse>> SearchUsersAsync(string query, int currentUserId, int take)
         {
             try
             {
+                var pattern = LikePattern.Contains(query);
                 var users = await _context.Users
-                    .Where(u => u.Username.Contains(query) || u.DisplayName.Contains(query))
+                    .Where(u => EF.Functions.ILike(u.Username, pattern, LikePattern.EscapeCharacter)
+                        || EF.Functions.ILike(u.DisplayName, pattern, LikePattern.EscapeCharacter))
                     .Take(take)
                     .ToListAsync();
 

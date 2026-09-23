@@ -7,6 +7,7 @@ import { NotificationsComponent } from './components/notifications';
 import { PostDetailComponent } from './components/post-detail';
 import { ProfileComponent } from './components/profile';
 import { RegisterComponent } from './components/register';
+import { SearchComponent } from './components/search';
 import { followListMatcher, routes } from './app.routes';
 
 /** The route table as the app really has it: which address opens which page, and who may open it. */
@@ -24,6 +25,7 @@ describe('routes', () => {
     ['post/:id', PostDetailComponent],
     ['notifications', NotificationsComponent],
     ['hashtag/:tag', HashtagComponent],
+    ['search', SearchComponent],
     ['profile/:username', ProfileComponent],
   ])('%s opens its page, for signed-in users only', async (path, component) => {
     expect(routeFor(path), `no route for ${path}`).toBeDefined();
@@ -52,6 +54,8 @@ describe('routes', () => {
   it('has no other pages than the ones above', () => {
     const paths = routes.map((r) => r.path ?? '(matcher)').sort();
 
-    expect(paths).toEqual(['', '(matcher)', '**', 'hashtag/:tag', 'home', 'login', 'notifications', 'post/:id', 'profile/:username', 'register'].sort());
+    expect(paths).toEqual(
+      ['', '(matcher)', '**', 'hashtag/:tag', 'home', 'login', 'notifications', 'post/:id', 'profile/:username', 'register', 'search'].sort(),
+    );
   });
 });

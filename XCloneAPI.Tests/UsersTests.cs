@@ -134,6 +134,59 @@ public class UsersTests(ApiFixture api)
     }
 
     [Fact]
+    public async Task Search_MatchesWithoutRegardToCase_OnEitherSide()
+    {
+        var token = Guid.NewGuid().ToString("N")[..10];
+        var target = await api.RegisterAsync($"Findable{token}");
+
+        async Task<List<UserResponse>> Search(string query) =>
+            await api.Anonymous.GetFromJsonAsync<List<UserResponse>>($"/api/users/search?query={query}", TestUser.Json) ?? [];
+
+        Assert.Single(await Search(target.Username.ToUpperInvariant()));
+        Assert.Single(await Search(target.Username.ToLowerInvariant()));
+    }
+
+    [Fact]
+    public async Task Search_AlsoMatchesTheDisplayName_EvenWhenTheUsernameDoesNot()
+    {
+        var token = Guid.NewGuid().ToString("N")[..10];
+        var username = $"user{token}";
+        var register = await api.Anonymous.PostAsJsonAsync("/api/auth/register", new
+        {
+            username,
+            email = $"{username}@example.test",
+            password = "Passw0rd!x",
+            displayName = $"Totally Different Name {token}",
+        });
+        await register.ShouldBeAsync(HttpStatusCode.OK);
+
+        var results = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>(
+            $"/api/users/search?query={Uri.EscapeDataString("Totally Different")}", TestUser.Json);
+
+        var found = Assert.Single(results!);
+        Assert.Equal(username, found.Username);
+    }
+
+    [Fact]
+    public async Task Search_TreatsABackslashAsPlainTextToo()
+    {
+        var token = Guid.NewGuid().ToString("N")[..10];
+        var register = await api.Anonymous.PostAsJsonAsync("/api/auth/register", new
+        {
+            username = $"back{token}",
+            email = $"back{token}@example.test",
+            password = "Passw0rd!x",
+            displayName = $@"C:\path\{token}",
+        });
+        await register.ShouldBeAsync(HttpStatusCode.OK);
+
+        var results = await api.Anonymous.GetFromJsonAsync<List<UserResponse>>(
+            $"/api/users/search?query={Uri.EscapeDataString($@"C:\path\{token}")}", TestUser.Json);
+
+        Assert.Single(results!);
+    }
+
+    [Fact]
     public async Task Search_NeedsAQuery()
     {
         await (await api.Anonymous.GetAsync("/api/users/search")).ShouldBeAsync(HttpStatusCode.BadRequest);

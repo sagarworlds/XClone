@@ -56,6 +56,11 @@ export const routes: Routes = [
     canActivate: [authGuard]
   },
   {
+    path: 'search',
+    loadComponent: () => import('./components/search').then(m => m.SearchComponent),
+    canActivate: [authGuard]
+  },
+  {
     path: 'notifications',
     loadComponent: () => import('./components/notifications').then(m => m.NotificationsComponent),
     canActivate: [authGuard]

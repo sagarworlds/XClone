@@ -1,6 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../services/api.service';
 import { TrendingHashtag, User } from '../models/types';
 import { UserRowComponent } from './user-row';
@@ -55,6 +55,7 @@ import { UserRowComponent } from './user-row';
           type="text"
           [(ngModel)]="searchQuery"
           (input)="onSearchChange()"
+          (keydown.enter)="goToSearchPage()"
           placeholder="Search users..."
         />
       </div>
@@ -97,6 +98,7 @@ import { UserRowComponent } from './user-row';
 })
 export class WidgetsComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
 
   searchQuery = '';
   searchResults = signal<User[]>([]);
@@ -128,5 +130,11 @@ export class WidgetsComponent implements OnInit {
     this.api.searchUsers(this.searchQuery).subscribe({
       next: (users) => this.searchResults.set(users),
     });
+  }
+
+  /** Enter in the box goes to the full search page (posts and people), instead of only the dropdown's people. */
+  goToSearchPage(): void {
+    const query = this.searchQuery.trim();
+    if (query) this.router.navigate(['/search'], { queryParams: { q: query } });
   }
 }
