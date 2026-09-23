@@ -12,6 +12,7 @@ namespace XCloneAPI.Services
         Task<PagedResponse<PostResponse>> GetFeedAsync(int userId, TimelineCursor? after, int take);
         Task<PagedResponse<PostResponse>> GetUserPostsAsync(int userId, int currentUserId, TimelineCursor? after, int take);
         Task<PagedResponse<PostResponse>> GetHashtagPostsAsync(string tag, int currentUserId, int? beforeId, int take);
+        Task<PostResponse?> UpdatePostAsync(int postId, int userId, UpdatePostRequest request);
         Task<bool> DeletePostAsync(int postId, int userId);
     }
 }

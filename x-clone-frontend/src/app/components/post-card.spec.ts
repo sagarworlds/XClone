@@ -265,6 +265,315 @@ describe('PostCardComponent', () => {
     });
   });
 
+  describe('the Edited label', () => {
+    const label = () => el().querySelector<HTMLElement>('.post-edited');
+
+    it('shows next to the time once the author has changed the text, and says when', async () => {
+      await show(makePost(7, { editedAt: '2026-09-21T10:00:00Z' }));
+
+      expect(label()?.textContent).toBe('Edited');
+      expect(label()?.title).toBe(`Edited ${new Date('2026-09-21T10:00:00Z').toLocaleString()}`);
+      expect(label()?.previousElementSibling?.textContent).toBe('·');
+      expect(label()?.previousElementSibling?.previousElementSibling?.classList).toContain('post-time');
+    });
+
+    it('is not there on a post that was never edited', async () => {
+      await show(makePost(7, { editedAt: null }));
+
+      expect(label()).toBeNull();
+    });
+
+    it('is not there when the server sent no such field (an older answer)', async () => {
+      await show(makePost(7, { editedAt: undefined as unknown as null }));
+
+      expect(label()).toBeNull();
+    });
+
+    it('is on the main post of a thread too', async () => {
+      await show(makePost(7, { editedAt: '2026-09-21T10:00:00Z' }), true);
+
+      expect(label()).not.toBeNull();
+    });
+  });
+
+  describe('edit', () => {
+    const mine = (id = 7, overrides: Partial<Post> = {}) => makePost(id, { user: me, userId: me.id, content: 'first draft', ...overrides });
+    const editButton = () => el().querySelector<HTMLButtonElement>('.edit-post-btn');
+    const editor = () => el().querySelector('app-post-editor');
+    const box = () => el().querySelector<HTMLTextAreaElement>('app-post-editor textarea')!;
+    const saveButton = () => el().querySelector<HTMLButtonElement>('.editor-save')!;
+    const textNow = () => el().querySelector('.post-text-content')?.textContent?.trim();
+
+    async function typeAndSave(text: string) {
+      box().value = text;
+      box().dispatchEvent(new Event('input'));
+      await settle();
+      saveButton().click();
+      await settle();
+    }
+
+    it('is offered on your own posts only, next to Delete', async () => {
+      await show(mine());
+      expect(editButton()).not.toBeNull();
+      expect(editButton()!.title).toBe('Edit');
+      expect(editButton()!.getAttribute('aria-label')).toBe('Edit post');
+      expect(editButton()!.parentElement).toBe(button('delete-post-btn').parentElement);
+
+      await show(makePost(8));
+      expect(editButton()).toBeNull();
+    });
+
+    it('is not offered on somebody else\'s post that you reposted', async () => {
+      await show(makePost(8, { retweetedBy: me })); // I reposted somebody else's post
+
+      expect(editButton()).toBeNull();
+    });
+
+    it('swaps the text for a box with the text in it, and hides the pencil meanwhile', async () => {
+      await show(mine());
+
+      editButton()!.click();
+      await settle();
+
+      expect(editor()).not.toBeNull();
+      expect(box().value).toBe('first draft');
+      expect(textNow()).toBeUndefined(); // the plain text is not shown twice
+      expect(editButton()).toBeNull();
+      expect(button('delete-post-btn')).not.toBeNull();
+    });
+
+    it('does not open the thread', async () => {
+      await show(mine());
+
+      editButton()!.click();
+      await settle();
+      box().click();
+
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the pictures and the buttons while editing', async () => {
+      await show(mine(7, { mediaUrls: [`/uploads/${'a'.repeat(32)}.png`], likesCount: 3 }));
+
+      editButton()!.click();
+      await settle();
+
+      expect(el().querySelectorAll('.media-grid img')).toHaveLength(1);
+      expect(count('like-btn')).toBe('3');
+    });
+
+    describe('saving', () => {
+      it('sends the new text to the server, and shows it when the server agrees', async () => {
+        await show(mine(7, { retweetsCount: 2 }));
+        editButton()!.click();
+        await settle();
+
+        await typeAndSave('second draft');
+        const request = http().expectOne(`${API}/posts/7`);
+        expect(request.request.method).toBe('PUT');
+        expect(request.request.body).toEqual({ content: 'second draft' });
+        expect(editor()).not.toBeNull(); // still open while the server thinks
+        expect(saveButton().textContent?.trim()).toBe('Saving...');
+        expect(changes).toEqual([]);
+
+        request.flush(mine(7, { content: 'second draft', retweetsCount: 2, editedAt: '2026-09-21T10:00:00Z' }));
+        await settle();
+
+        expect(editor()).toBeNull();
+        expect(textNow()).toBe('second draft');
+        expect(el().querySelector('.post-edited')).not.toBeNull();
+        expect(editButton()).not.toBeNull();
+        expect(changes.map((p) => [p.content, p.editedAt])).toEqual([['second draft', '2026-09-21T10:00:00Z']]);
+      });
+
+      it('links the names the server found in the new text', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+
+        await typeAndSave('thanks @Bob and @ghost');
+        http().expectOne(`${API}/posts/7`).flush(mine(7, { content: 'thanks @Bob and @ghost', mentions: ['Bob'], editedAt: '2026-09-21T10:00:00Z' }));
+        await settle();
+
+        const links = [...el().querySelectorAll<HTMLAnchorElement>('.post-text-content a.mention')];
+        expect(links.map((a) => [a.textContent, a.getAttribute('href')])).toEqual([['@Bob', '/profile/Bob']]);
+      });
+
+      it('can be done again straight away, with the box working as it did the first time', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).flush(mine(7, { content: 'second draft', editedAt: '2026-09-21T10:00:00Z' }));
+        await settle();
+
+        editButton()!.click();
+        await settle();
+        expect(box().value).toBe('second draft');
+        expect(box().disabled).toBe(false);
+        expect(saveButton().textContent?.trim()).toBe('Save');
+
+        await typeAndSave('third draft');
+        const request = http().expectOne(`${API}/posts/7`);
+        expect(request.request.body).toEqual({ content: 'third draft' });
+        request.flush(mine(7, { content: 'third draft', editedAt: '2026-09-21T11:00:00Z' }));
+        await settle();
+
+        expect(textNow()).toBe('third draft');
+      });
+
+      it('keeps the repost banner on an entry that is a repost', async () => {
+        await show(mine(7, { retweetedBy: bob }));
+        editButton()!.click();
+        await settle();
+
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).flush(mine(7, { content: 'second draft', editedAt: '2026-09-21T10:00:00Z', retweetedBy: null }));
+        await settle();
+
+        expect(el().querySelector('.repost-banner')?.textContent).toContain('Bob reposted');
+        expect(changes[0].retweetedBy).toEqual(bob);
+      });
+
+      it('sends one request however often Save is pressed', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        await typeAndSave('second draft');
+
+        fixture.componentInstance.saveEdit('second draft');
+        saveButton().click();
+
+        http().expectOne(`${API}/posts/7`).flush(mine(7, { content: 'second draft' }));
+      });
+
+      it('does not lose the typing when the post is liked meanwhile', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        box().value = 'half written';
+        box().dispatchEvent(new Event('input'));
+
+        button('like-btn').click();
+        http().expectOne(`${API}/likes/toggle/7`).flush({ liked: true });
+        await settle();
+
+        expect(editor()).not.toBeNull();
+        expect(box().value).toBe('half written');
+      });
+    });
+
+    describe('cancelling', () => {
+      it('closes the box, keeps the old text and sends nothing', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        box().value = 'never mind';
+        box().dispatchEvent(new Event('input'));
+
+        el().querySelector<HTMLButtonElement>('.editor-cancel')!.click();
+        await settle();
+
+        expect(editor()).toBeNull();
+        expect(textNow()).toBe('first draft');
+        expect(changes).toEqual([]);
+        http().expectNone(`${API}/posts/7`);
+      });
+
+      it('starts again from the post\'s own text the next time', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        box().value = 'never mind';
+        box().dispatchEvent(new Event('input'));
+        el().querySelector<HTMLButtonElement>('.editor-cancel')!.click();
+        await settle();
+
+        editButton()!.click();
+        await settle();
+
+        expect(box().value).toBe('first draft');
+      });
+    });
+
+    describe('when the server says no', () => {
+      it('keeps the box open with the typing, and says what happened', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+        await settle();
+
+        expect(editor()).not.toBeNull();
+        expect(box().value).toBe('second draft');
+        expect(el().querySelector('[role="alert"]')?.textContent).toBe('boom');
+        expect(saveButton().disabled).toBe(false); // it can be tried again
+        expect(textNow()).toBeUndefined();
+        expect(changes).toEqual([]);
+      });
+
+      it('uses its own words when the server gave none', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).error(new ProgressEvent('error'));
+        await settle();
+
+        expect(el().querySelector('[role="alert"]')?.textContent).toBe('Could not save your changes. Please try again.');
+      });
+
+      it('lets the person try again, and shows nothing of the failure afterwards', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+        await settle();
+
+        saveButton().click();
+        await settle();
+        expect(el().querySelector('[role="alert"]')).toBeNull(); // the old failure is gone while trying again
+        http().expectOne(`${API}/posts/7`).flush(mine(7, { content: 'second draft', editedAt: '2026-09-21T10:00:00Z' }));
+        await settle();
+
+        expect(editor()).toBeNull();
+        expect(textNow()).toBe('second draft');
+      });
+
+      it('forgets the failure when the box is closed and opened again', async () => {
+        await show(mine());
+        editButton()!.click();
+        await settle();
+        await typeAndSave('second draft');
+        http().expectOne(`${API}/posts/7`).flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+        await settle();
+
+        el().querySelector<HTMLButtonElement>('.editor-cancel')!.click();
+        await settle();
+        editButton()!.click();
+        await settle();
+
+        expect(el().querySelector('[role="alert"]')).toBeNull();
+      });
+    });
+
+    it('closes when the page hands the card a different post', async () => {
+      await show(mine(7));
+      editButton()!.click();
+      await settle();
+
+      fixture.componentRef.setInput('post', mine(8, { content: 'another post of mine' }));
+      await settle();
+
+      expect(editor()).toBeNull();
+      expect(textNow()).toBe('another post of mine');
+    });
+  });
+
   describe('delete', () => {
     it('is offered on your own posts only', async () => {
       await show(makePost(7, { user: me, userId: me.id }));

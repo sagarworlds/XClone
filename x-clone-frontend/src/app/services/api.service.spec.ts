@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { Observable } from 'rxjs';
-import { AuthResponse } from '../models/types';
+import { AuthResponse, Post } from '../models/types';
 import { API, http, makeNotification, makePost, makeUser, provideAppTesting, signInAs } from '../../testing/helpers';
 import { ApiService } from './api.service';
 
@@ -203,6 +203,18 @@ describe('ApiService', () => {
       const reply = http().expectOne(`${API}/posts/1/replies`);
       expect(reply.request.body).toEqual({ content: 'reply with pictures', mediaUrls: images });
       reply.flush(makePost(2));
+    });
+
+    it('changes the text of a post with a PUT that carries only the text, and gives back the post', () => {
+      let answer: Post | undefined;
+
+      api.updatePost(7, 'better words').subscribe((post) => (answer = post));
+      const request = http().expectOne(`${API}/posts/7`);
+
+      expect(request.request.method).toBe('PUT');
+      expect(request.request.body).toEqual({ content: 'better words' });
+      request.flush(makePost(7, { content: 'better words', editedAt: '2026-09-21T10:00:00Z' }));
+      expect(answer?.editedAt).toBe('2026-09-21T10:00:00Z');
     });
 
     it('uploads an image as a multipart form with the file in the "file" field, and gives back its address', () => {

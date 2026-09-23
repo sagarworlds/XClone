@@ -23,6 +23,8 @@ export interface Post {
   repliesCount: number;
   createdAt: string;
   updatedAt: string;
+  // When the author last changed the text; null for a post that was never edited
+  editedAt: string | null;
   user: User;
   isLiked: boolean;
   // Set when the post is a reply

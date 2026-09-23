@@ -37,6 +37,7 @@ export function makePost(id: number, overrides: Partial<Post> = {}): Post {
     repliesCount: 0,
     createdAt: '2026-09-20T10:00:00Z',
     updatedAt: '2026-09-20T10:00:00Z',
+    editedAt: null,
     user: author,
     isLiked: false,
     parentPostId: null,

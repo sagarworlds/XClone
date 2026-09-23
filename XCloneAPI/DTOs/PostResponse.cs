@@ -11,6 +11,9 @@
         public int RepliesCount { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
+
+        // When the author last changed the text (the app shows an "Edited" label); null if it never was
+        public DateTime? EditedAt { get; set; }
         public UserResponse User { get; set; }
         public bool IsLiked { get; set; }
 

@@ -128,6 +128,11 @@ export class ApiService {
     return this.http.post<Post>(`${this.baseUrl}/posts`, { content, mediaUrls });
   }
 
+  /** Changes the text of your own post; the answer is the post as it is now (with the new mentions). */
+  updatePost(id: number, content: string): Observable<Post> {
+    return this.http.put<Post>(`${this.baseUrl}/posts/${id}`, { content });
+  }
+
   deletePost(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/posts/${id}`);
   }

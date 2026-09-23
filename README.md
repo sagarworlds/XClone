@@ -22,6 +22,7 @@ A modern, full-stack clone of X (formerly Twitter) featuring a secure ASP.NET Co
 - **Interactions**: Fast, optimistic UI updates for liking/unliking posts.
 - **Load more**: The home timeline, profile tabs, reply threads and notifications load 20 entries at a time with a "Load more" button. Pages are read with cursors, so posting, deleting or undoing a repost in between (or other people doing the same) can never repeat or skip an entry, and a failed page can be retried without losing what is already on screen.
 - **Mentions**: Write `@username` in a post or reply to name someone. If the account exists, the name becomes a link to their profile and they get a notification ("mentioned you in a post"). You are not told about your own mentions, and someone you reply to is told once, as a reply.
+- **Editing**: The pencil on your own post or reply turns its text into a box (with the character counter, Cancel or Esc, and Save or Ctrl+Enter). An edited post keeps its place in every timeline and gets an "Edited" label next to its time (hover it for when). Hashtags and mentions are read again from the new text, and only people who are named now and were not before are notified. The images stay as they were.
 - **Hashtags**: A `#tag` in a post (or reply) is a link to that tag's page, which lists every post and reply that uses it, newest first, 20 at a time. The right-hand column shows what is trending: the five tags most used by posts of the last week.
 - **Images**: Attach up to 4 images (PNG, JPEG, GIF or WebP, 5 MB each) to a post or a reply. They upload as soon as you pick them, with a preview you can remove, and show in a grid on the post; clicking one opens the full picture in a new tab.
 - **Replies & Threads**: Reply to any post (or to a reply). Each post has its own thread page with a reply box, and profiles have a Posts and a Replies tab.
@@ -155,6 +156,16 @@ A post's response has `mentions`: the usernames its text names with `@` that are
 - **Usernames** may now only contain letters, digits and underscores (new accounts; a name that differs from an existing one only by case is taken too, since `@name` would otherwise be ambiguous). Older accounts keep working. If two older accounts differ only by case, `@name` finds the one spelled exactly like that, else the oldest.
 - The app and the server use the same rule (`utils/text-entities.ts` and `MentionParser.cs`), tested against the same list of examples, `x-clone-frontend/src/testing/text-entities.json`. Posts written before mentions existed were filled in by the migration (links only, nobody is notified about them).
 
+### Editing posts (API)
+
+`PUT /api/posts/{id}` with `{ "content": "..." }` changes the text of a post or reply and answers with the post as it is now.
+
+- The text follows the rules of a new post (not blank, at most 280 characters). Only the author may edit: anyone else, or a post that does not exist, gets the same `404 Post not found or unauthorized` as deleting does, and a signed-out request gets `401`. A repost is edited through the original post, so only its author can. There is no time limit.
+- Only the text changes: the images, the post being replied to and the counts stay, and other fields in the request are ignored.
+- Every post response has `editedAt`: `null` until the text is first changed, then the time of the last change (`updatedAt` moves with it). Saying the same text again changes nothing, not even `editedAt`. `createdAt` never changes, so an edited post keeps its place in timelines and in the paging cursors.
+- The hashtags and mentions are worked out again from the new text (the rows follow it). Only people who are named now and were not before get a `mention` notification; someone taken out of the text loses the notification about it, and would be told again if named again later. The author of the post a reply answers is still told once, as a reply.
+- Migration `AddPostEditedAt` adds the nullable column `posts.edited_at`; posts written before it count as never edited.
+
 ### Hashtags (API)
 
 ```
@@ -208,7 +219,7 @@ dotnet test XCloneAPI.Tests
 
 - **Isolated:** every run creates its own database named `xclone_it_<random>` from the real EF migrations and drops it afterwards. Your development database is never touched.
 - **Which server:** the tests use the PostgreSQL server from your `XCloneAPI` user-secrets connection string (see *Configure Secrets*). To use another server, for example in CI, set `XCLONE_TEST_CONNECTION`, e.g. `Host=localhost;Port=5432;Username=postgres;Password=<password>`.
-- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), mentions (the rule, who is named and who is told, replies, accounts that differ by case, usernames, and the backfill), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
+- **What is covered:** auth and tokens, password hashing and legacy-hash upgrade, posts, replies, reposts, likes, follows (including the followers and following lists), image uploads (what is accepted and refused, stored names, serving, attaching, clean-up), hashtags (the rule, the tag pages, trends, and the migration's backfill of old posts), mentions (the rule, who is named and who is told, replies, accounts that differ by case, usernames, and the backfill), editing posts (who may, what is accepted, what changes and what stays, hashtags and mentions following the new text, timeline order and paging, and the migration), notifications, timelines and cursor paging (including changes between pages and entries that share a moment), privacy (no emails or hashes in responses), rate limiting, startup safety checks (placeholder secrets), CORS, and the migrations.
 - **Frontend contract:** the tests read `x-clone-frontend/src/app/services/api.service.ts` and `models/types.ts` and check that every URL the Angular app calls exists on the API and that responses contain every field the TypeScript types declare, so the two sides can't silently drift apart again.
 
 ### Frontend tests
@@ -225,6 +236,7 @@ npm test
 - **Notifications:** the unread-badge service (polling, hidden tabs, sign-out, stale answers), the sidebar badge, and the Notifications page.
 - **Composer and images:** choosing, uploading, previewing and removing images, the limits, failing uploads, and that posting waits for uploads; the address helper that only ever loads our own images.
 - **Mentions and sign-up:** mention links (only real accounts, in the spelling of their profile), the mention notifications, and the sign-up page's username rule and error messages.
+- **Editing:** the editor box (counter, Save only when there is something new, Cancel and keyboard shortcuts, locked while saving, failures), and the card's pencil, save, cancel and failure handling, the "Edited" label, and that the timeline entry keeps its repost banner.
 - **Hashtags:** the tokenizer against the shared examples, the text component (links, no HTML, every character kept), the hashtag page, the Trends card, and the route table.
 - **Post card:** what a post shows, that text is never treated as HTML, own-post rules, optimistic like and repost with rollback, delete (including a failed delete), and opening a thread.
 - **Foundations:** `ApiService` requests and session handling, and the time formatter.
