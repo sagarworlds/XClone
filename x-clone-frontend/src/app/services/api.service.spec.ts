@@ -250,6 +250,22 @@ describe('ApiService', () => {
       second.flush({ items: [], nextCursor: null });
     });
 
+    it('reads the search results a page at a time, sending the query', () => {
+      api.searchPosts('coffee').subscribe();
+      const first = http().expectOne((r) => r.url === `${API}/posts/search`);
+      expect(first.request.method).toBe('GET');
+      expect(first.request.params.get('query')).toBe('coffee');
+      expect(first.request.params.get('take')).toBe('20');
+      expect(first.request.params.has('cursor')).toBe(false);
+      first.flush({ items: [], nextCursor: null });
+
+      api.searchPosts('#coffee', 'c1', 5).subscribe();
+      const second = http().expectOne((r) => r.url === `${API}/posts/search` && r.params.get('cursor') === 'c1');
+      expect(second.request.params.get('query')).toBe('#coffee');
+      expect(second.request.params.get('take')).toBe('5');
+      second.flush({ items: [], nextCursor: null });
+    });
+
     it('asks for the trending hashtags, five by default', () => {
       api.getTrendingHashtags().subscribe();
       const request = http().expectOne((r) => r.url === `${API}/hashtags/trending`);

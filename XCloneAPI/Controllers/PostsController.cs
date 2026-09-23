@@ -218,6 +218,35 @@ namespace XCloneAPI.Controllers
             }
         }
 
+        // Posts and replies whose text contains the query, or (for a query starting with #) every post with that tag.
+        // Signed-in only: an anonymous search would be an easy way to scrape every post at speed.
+        [HttpGet("search")]
+        public async Task<ActionResult<PagedResponse<PostResponse>>> SearchPosts([FromQuery] string? query, [FromQuery] string? cursor = null, [FromQuery] int take = 10)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(query))
+                    return BadRequest(new { message = "Search query is required" });
+
+                var trimmed = query.Trim();
+                if (trimmed.Length > 100)
+                    return BadRequest(new { message = "Search query is too long" });
+
+                if (!IdCursor.TryParse(cursor, out var beforeId))
+                    return BadRequest(new { message = InvalidCursorMessage });
+
+                take = Math.Clamp(take, 1, MaxPageSize);
+                var currentUserId = GetCurrentUserId();
+                var posts = await _postService.SearchPostsAsync(trimmed, currentUserId, beforeId, take);
+                return Ok(posts);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error searching posts: {ex.Message}");
+                return StatusCode(500, new { message = "Internal server error" });
+            }
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeletePost(int id)
         {

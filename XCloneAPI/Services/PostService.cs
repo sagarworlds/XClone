@@ -257,6 +257,51 @@ namespace XCloneAPI.Services
             }
         }
 
+        // Posts and replies whose text contains the query (case-insensitively; its own %, _ and \ are literal), newest
+        // first. A query that is a whole hashtag, `#tag` or just `tag`, is searched by tag instead (every post that
+        // uses it, the same list `GetHashtagPostsAsync` gives), which is faster and does not need the # to be typed.
+        public async Task<PagedResponse<PostResponse>> SearchPostsAsync(string query, int currentUserId, int? beforeId, int take)
+        {
+            try
+            {
+                List<TimelineEntry> entries;
+                var trimmed = query.Trim();
+
+                if (trimmed.StartsWith('#') && HashtagParser.TryNormalize(trimmed, out var tag))
+                {
+                    var tagQuery = _context.PostHashtags.Where(h => h.Tag == tag);
+                    if (beforeId != null)
+                        tagQuery = tagQuery.Where(h => h.PostId < beforeId);
+
+                    entries = await tagQuery
+                        .OrderByDescending(h => h.PostId)
+                        .Take(take + 1)
+                        .Select(h => new TimelineEntry { PostId = h.PostId })
+                        .ToListAsync();
+                }
+                else
+                {
+                    var pattern = LikePattern.Contains(trimmed);
+                    var textQuery = _context.Posts.Where(p => EF.Functions.ILike(p.Content, pattern, LikePattern.EscapeCharacter));
+                    if (beforeId != null)
+                        textQuery = textQuery.Where(p => p.Id < beforeId);
+
+                    entries = await textQuery
+                        .OrderByDescending(p => p.Id)
+                        .Take(take + 1)
+                        .Select(p => new TimelineEntry { PostId = p.Id })
+                        .ToListAsync();
+                }
+
+                return await BuildPageAsync(entries, take, currentUserId, e => IdCursor.Encode(e.PostId));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Error searching posts: {ex.Message}");
+                throw;
+            }
+        }
+
         // The users a text names with @ that exist, at most 10. A name matches without regard to case; when two
         // accounts differ only by case (older accounts), the one spelled exactly as written wins.
         private async Task<List<User>> ResolveMentionsAsync(string content)

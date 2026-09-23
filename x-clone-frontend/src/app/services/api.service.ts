@@ -113,6 +113,11 @@ export class ApiService {
     return this.http.get<TrendingHashtag[]>(`${this.baseUrl}/hashtags/trending`, { params: new HttpParams().set('take', take) });
   }
 
+  /** Posts and replies whose text contains the query, newest first; a query starting with # searches by tag instead. */
+  searchPosts(query: string, cursor: string | null = null, take = 20): Observable<Page<Post>> {
+    return this.http.get<Page<Post>>(`${this.baseUrl}/posts/search`, { params: this.pageParams(cursor, take).set('query', query) });
+  }
+
   createReply(postId: number, content: string, mediaUrls: string[] = []): Observable<Post> {
     return this.http.post<Post>(`${this.baseUrl}/posts/${postId}/replies`, { content, mediaUrls });
   }
@@ -217,8 +222,8 @@ export class ApiService {
     return this.http.get<User[]>(`${this.baseUrl}/users/suggestions`, { params });
   }
 
-  searchUsers(query: string): Observable<User[]> {
-    const params = new HttpParams().set('query', query);
+  searchUsers(query: string, take = 10): Observable<User[]> {
+    const params = new HttpParams().set('query', query).set('take', take);
     return this.http.get<User[]>(`${this.baseUrl}/users/search`, { params });
   }
 }
